@@ -1,0 +1,12 @@
+name = "tas-hub"
+pages_build_output_dir = "dist"
+
+[build]
+command = "npm run build"
+watch_paths = ["src/**/*.{ts,tsx}"]
+
+[build.upload]
+format = "service-worker"
+
+[env.production]
+vars = { ENVIRONMENT = "production" }
