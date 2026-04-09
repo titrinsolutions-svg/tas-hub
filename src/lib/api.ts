@@ -153,7 +153,7 @@ export async function searchEmails(query: string, max = 10): Promise<GmailMessag
   }
 }
 
-// ─── Gemini AI ────────────────────────────────────────────────────────────────
+// ─── Ollama AI (Local) ────────────────────────────────────────────────────────
 
 export interface ChatMessage {
   role: 'user' | 'model';
@@ -165,7 +165,7 @@ export async function geminiChat(
   history: ChatMessage[] = [],
   context?: string
 ): Promise<string> {
-  const { response } = await apiFetch('/api/gemini/chat', {
+  const { response } = await apiFetch('/api/ollama/chat', {
     method: 'POST',
     body: JSON.stringify({ message, history, context }),
   });
@@ -187,7 +187,7 @@ export interface EmailDraftResponse {
 }
 
 export async function generateEmailDraft(params: EmailDraftRequest): Promise<EmailDraftResponse> {
-  const { draft } = await apiFetch('/api/gemini/email-draft', {
+  const { draft } = await apiFetch('/api/ollama/email-draft', {
     method: 'POST',
     body: JSON.stringify(params),
   });
