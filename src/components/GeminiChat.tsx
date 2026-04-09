@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Sparkles, Send, Loader2, Bot, User,
-  Trash2, Copy, CheckCircle2, AlertCircle
+  Trash2, Copy, CheckCircle2, AlertCircle, ChevronDown
 } from 'lucide-react';
 import { geminiChat, ChatMessage } from '../lib/api';
 
@@ -18,12 +18,26 @@ const QUICK_PROMPTS = [
   'Help me write a follow-up email for a client who hasn\'t responded',
 ];
 
+// Available AI models (newest first)
+const AVAILABLE_MODELS = [
+  { id: 'gemma4:latest', name: 'Gemma 4 (Latest)', description: 'Google\'s newest model - 9.6GB' },
+  { id: 'qwen3.5:latest', name: 'Qwen 3.5 (Latest)', description: 'Latest Qwen reasoning - 6.6GB' },
+  { id: 'qwen3-coder:30b', name: 'Qwen 3-Coder (Largest)', description: 'Most powerful - 18GB' },
+  { id: 'qwen2.5:latest', name: 'Qwen 2.5', description: 'Excellent reasoning - 4.7GB' },
+  { id: 'mistral:latest', name: 'Mistral (Balanced)', description: 'Quality + speed - 4.4GB' },
+  { id: 'neural-chat:latest', name: 'Neural Chat (Intel)', description: 'Business optimized - 4.1GB' },
+  { id: 'llama2-uncensored:latest', name: 'LLaMA 2 Unrestricted', description: 'Meta\'s model - 3.8GB' },
+  { id: 'gemma3:4b', name: 'Gemma 3 (Lightweight)', description: 'Fast & small - 3.3GB' },
+];
+
 export function GeminiChat({ backendAvailable }: GeminiChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [selectedModel, setSelectedModel] = useState(AVAILABLE_MODELS[0].id); // Default: Gemma 4
+  const [showModelSelector, setShowModelSelector] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -44,11 +58,12 @@ export function GeminiChat({ backendAvailable }: GeminiChatProps) {
     setIsLoading(true);
 
     try {
-      const response = await geminiChat(messageText, messages);
+      // Send the selected model to the backend
+      const response = await geminiChat(messageText, messages, selectedModel);
       setMessages([...updatedHistory, { role: 'model', content: response }]);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to get response');
-      setMessages(updatedHistory); // Remove the user message on error? No, keep it
+      setMessages(updatedHistory);
     } finally {
       setIsLoading(false);
     }
@@ -98,15 +113,56 @@ export function GeminiChat({ backendAvailable }: GeminiChatProps) {
     );
   }
 
+  const currentModelName = AVAILABLE_MODELS.find(m => m.id === selectedModel)?.name || 'Unknown';
+
   return (
     <div className="max-w-2xl mx-auto flex flex-col" style={{ height: 'calc(100vh - 160px)' }}>
       {/* Header */}
       <div className="flex items-center justify-between mb-4 flex-shrink-0">
         <div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight">AI Assistant</h1>
-          <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-0.5">
-            Gemini 2.0 Flash · TAS Context
-          </p>
+          <div className="flex items-center gap-2 mt-0.5">
+            {/* Model Selector */}
+            <div className="relative">
+              <button
+                onClick={() => setShowModelSelector(!showModelSelector)}
+                className="flex items-center gap-2 text-xs text-slate-400 font-bold uppercase tracking-widest hover:text-slate-600 transition-colors px-2 py-1 rounded-lg hover:bg-slate-100"
+              >
+                <span className="text-violet-600">{currentModelName}</span>
+                <ChevronDown className="w-3 h-3" />
+              </button>
+
+              {/* Dropdown Menu */}
+              {showModelSelector && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  className="absolute top-full mt-1 left-0 bg-white border border-slate-200 rounded-xl shadow-lg z-50 w-64"
+                >
+                  {AVAILABLE_MODELS.map((model) => (
+                    <button
+                      key={model.id}
+                      onClick={() => {
+                        setSelectedModel(model.id);
+                        setShowModelSelector(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 text-xs font-medium transition-colors ${
+                        selectedModel === model.id
+                          ? 'bg-violet-50 text-violet-700 border-l-2 border-violet-600'
+                          : 'text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="font-bold">{model.name}</div>
+                      <div className="text-[10px] text-slate-500">{model.description}</div>
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </div>
+            <span className="text-slate-300">·</span>
+            <span className="text-xs text-slate-400 font-bold uppercase tracking-widest">TAS Context</span>
+          </div>
         </div>
         {messages.length > 0 && (
           <button
@@ -133,9 +189,9 @@ export function GeminiChat({ backendAvailable }: GeminiChatProps) {
                 <Sparkles className="w-7 h-7 text-white" />
               </div>
               <div>
-                <p className="font-black text-slate-800 text-lg">Gemini AI for TAS</p>
+                <p className="font-black text-slate-800 text-lg">Ollama AI for TAS</p>
                 <p className="text-sm text-slate-500 mt-1">
-                  Ask about projects, draft emails, get summaries
+                  {currentModelName} · Ask about projects, draft emails, get summaries
                 </p>
               </div>
             </div>

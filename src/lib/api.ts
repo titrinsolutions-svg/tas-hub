@@ -163,11 +163,21 @@ export interface ChatMessage {
 export async function geminiChat(
   message: string,
   history: ChatMessage[] = [],
+  modelOrContext?: string,
   context?: string
 ): Promise<string> {
+  // Support both old (context) and new (model) parameter for backwards compatibility
+  const finalModel = modelOrContext?.includes(':') ? modelOrContext : undefined;
+  const finalContext = !modelOrContext?.includes(':') ? modelOrContext : context;
+
   const { response } = await apiFetch('/api/ollama/chat', {
     method: 'POST',
-    body: JSON.stringify({ message, history, context }),
+    body: JSON.stringify({
+      message,
+      history,
+      context: finalContext,
+      model: finalModel, // Pass the selected model to backend
+    }),
   });
   return response;
 }
