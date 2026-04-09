@@ -1,0 +1,5 @@
+{
+  "name": "TAS Hub",
+  "description": "Professional hub for Titrin AgriSoil Solutions Ltd. managing projects, invoices, and field data.",
+  "requestFramePermissions": ["camera", "geolocation"]
+}
