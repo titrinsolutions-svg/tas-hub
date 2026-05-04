@@ -176,26 +176,30 @@ export function Projects({
 
                 <div className="space-y-6">
                   <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100">
-                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Quick Stats</h4>
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Status</h4>
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-500">Timeline</span>
-                        <span className="text-xs font-black text-brand-blue">Q2 2026</span>
+                        <span className="text-xs font-bold text-slate-500">Phase</span>
+                        <span className={cn(
+                          "px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest",
+                          project.status === 'urgent' ? 'bg-red-100 text-red-700' :
+                          project.status === 'hold' ? 'bg-brand-gold/10 text-brand-gold' :
+                          project.status === 'new' ? 'bg-brand-blue/10 text-brand-blue' :
+                          'bg-brand-green/10 text-brand-green'
+                        )}>
+                          {project.status}
+                        </span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-500">Soil Type</span>
-                        <span className="text-xs font-black text-brand-blue">Sandy Loam</span>
+                        <span className="text-xs font-bold text-slate-500">Type</span>
+                        <span className="text-xs font-black text-brand-blue">{project.badgeLabel}</span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-500">Risk Level</span>
-                        <span className="text-xs font-black text-brand-green">Low</span>
+                        <span className="text-xs font-bold text-slate-500">Region</span>
+                        <span className="text-xs font-black text-brand-blue">BC</span>
                       </div>
                     </div>
                   </div>
-                  
-                  <button className="w-full py-4 bg-brand-blue/5 hover:bg-brand-blue/10 text-brand-blue rounded-2xl text-xs font-black uppercase tracking-widest transition-all border border-brand-blue/10">
-                    Generate Report
-                  </button>
                 </div>
               </div>
             </motion.div>

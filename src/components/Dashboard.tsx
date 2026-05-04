@@ -90,7 +90,7 @@ export function Dashboard({
             />
           </div>
           <div>
-            <h1 className="text-3xl font-black text-brand-blue tracking-tight">{greeting}, Tish</h1>
+            <h1 className="text-3xl font-black text-brand-blue tracking-tight">{greeting}{isAdmin ? ', Tish' : ''}</h1>
             <p className="text-slate-500 font-medium">
               Titrin AgriSoil Solutions &nbsp;·&nbsp;
               {clock.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}

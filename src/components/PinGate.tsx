@@ -171,10 +171,10 @@ export function PinGate({ onUnlock }: PinGateProps) {
               <div className="relative group">
                 <div className={`absolute -inset-1 bg-gradient-to-r ${selectedRole === 'admin' ? 'from-brand-gold to-yellow-300' : 'from-brand-green to-emerald-400'} rounded-2xl blur opacity-20 group-focus-within:opacity-40 transition-opacity`} />
                 <div className="relative flex items-center justify-center gap-3 py-6 bg-slate-900/50 border border-white/10 rounded-2xl">
-                  {Array.from({ length: 4 }).map((_, i) => (
+                  {Array.from({ length: 8 }).map((_, i) => (
                     <span
                       key={i}
-                      className={`w-3.5 h-3.5 rounded-full transition-all ${
+                      className={`w-3 h-3 rounded-full transition-all ${
                         pin.length > i ? 'bg-white scale-110' : 'bg-white/10'
                       }`}
                     />
