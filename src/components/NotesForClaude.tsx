@@ -4,15 +4,26 @@ import {
   FileText, RefreshCw, Trash2, Info, Send, Bot, User as UserIcon,
   CheckCircle2, Circle, Sparkles, Loader2, AlertCircle
 } from 'lucide-react';
-import { UserEdits, NoteEntry } from '../types';
+import { UserEdits, NoteEntry, AppData } from '../types';
 import { cn } from '../lib/utils';
 import { geminiChat, hasDirectGeminiAccess, ChatMessage } from '../lib/api';
 
 interface NotesForClaudeProps {
   userEdits: UserEdits;
   backendAvailable: boolean;
+  data: AppData;
   onJournalChange: (journal: NoteEntry[]) => void;
   onSync: () => void;
+}
+
+function buildJournalContext(data: AppData, userEdits: UserEdits): string {
+  const open = data.weeklyActions.filter(a => !userEdits.completedActions.includes(a.id!));
+  return [
+    `Today: ${new Date().toLocaleDateString('en-CA')}`,
+    `Open actions: ${open.length}, Projects: ${data.projects.length}, Outstanding: ${data.invoices.totals.outstanding}`,
+    '',
+    'Recent projects: ' + data.projects.slice(0, 8).map(p => `${p.name} (${p.status})`).join(', '),
+  ].join('\n');
 }
 
 function formatTime(iso: string): string {
@@ -27,7 +38,7 @@ function formatTime(iso: string): string {
   }
 }
 
-export function NotesForClaude({ userEdits, backendAvailable, onJournalChange, onSync }: NotesForClaudeProps) {
+export function NotesForClaude({ userEdits, backendAvailable, data, onJournalChange, onSync }: NotesForClaudeProps) {
   const [draft, setDraft] = useState('');
   const [askingAI, setAskingAI] = useState(false);
   const [error, setError] = useState('');
@@ -83,7 +94,8 @@ export function NotesForClaude({ userEdits, backendAvailable, onJournalChange, o
         role: n.author === 'ai' ? 'model' : 'user',
         content: n.text,
       }));
-      const reply = await geminiChat(question, history);
+      const ctx = buildJournalContext(data, userEdits);
+      const reply = await geminiChat(question, history, undefined, ctx);
       post(reply, 'ai');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'AI request failed');

@@ -5,9 +5,12 @@ import {
   Trash2, Copy, CheckCircle2, AlertCircle, ChevronDown, Zap
 } from 'lucide-react';
 import { geminiChat, hasDirectGeminiAccess, ChatMessage } from '../lib/api';
+import { AppData, UserEdits } from '../types';
 
 interface GeminiChatProps {
   backendAvailable: boolean;
+  data: AppData;
+  userEdits: UserEdits;
 }
 
 const QUICK_PROMPTS = [
@@ -27,7 +30,28 @@ const OLLAMA_MODELS = [
   { id: 'gemma3:4b', name: 'Gemma 3', description: 'Fast & lightweight — 3.3 GB' },
 ];
 
-export function GeminiChat({ backendAvailable }: GeminiChatProps) {
+function buildContext(data: AppData, userEdits: UserEdits): string {
+  const open = data.weeklyActions.filter(a => !userEdits.completedActions.includes(a.id!));
+  const lines = [
+    `Today: ${new Date().toLocaleDateString('en-CA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`,
+    '',
+    `=== ACTIVE PROJECTS (${data.projects.length}) ===`,
+    ...data.projects.map(p => `- ${p.name} | client: ${p.client} | status: ${p.status} | ${p.note}`.slice(0, 280)),
+    '',
+    `=== OPEN ACTIONS (${open.length}) ===`,
+    ...open.map(a => `[${a.lane.toUpperCase()}/${a.pri.toUpperCase()}] ${a.project} :: ${a.task}`.slice(0, 300)),
+    '',
+    `=== OUTSTANDING INVOICES ===`,
+    `Total: ${data.invoices.totals.outstanding}`,
+    ...data.invoices.outstanding.map(i => `#${i.num} ${i.client} — ${i.amount} (issued ${i.issued})`),
+    '',
+    `=== UPCOMING ===`,
+    ...data.upcoming.slice(0, 10),
+  ];
+  return lines.join('\n').slice(0, 12000); // cap context size
+}
+
+export function GeminiChat({ backendAvailable, data, userEdits }: GeminiChatProps) {
   const directAvailable = hasDirectGeminiAccess();
   const aiAvailable = backendAvailable || directAvailable;
 
@@ -56,7 +80,8 @@ export function GeminiChat({ backendAvailable }: GeminiChatProps) {
     setIsLoading(true);
     try {
       const modelArg = backendAvailable ? selectedModel : undefined;
-      const response = await geminiChat(messageText, messages, modelArg);
+      const ctx = buildContext(data, userEdits);
+      const response = await geminiChat(messageText, messages, modelArg, ctx);
       setMessages([...updatedHistory, { role: 'model', content: response }]);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to get response');

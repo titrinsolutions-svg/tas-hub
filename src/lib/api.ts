@@ -187,8 +187,18 @@ export async function geminiChat(
   modelOrContext?: string,
   context?: string
 ): Promise<string> {
-  const finalModel = modelOrContext?.includes(':') ? modelOrContext : undefined;
-  const finalContext = !modelOrContext?.includes(':') ? modelOrContext : context;
+  // Backwards-compat: 3rd arg can be either a model id (contains ':') or a
+  // context string. If 4th arg is set, 3rd is always a model.
+  let finalModel: string | undefined;
+  let finalContext: string | undefined;
+  if (context !== undefined) {
+    finalModel = modelOrContext;
+    finalContext = context;
+  } else if (modelOrContext?.includes(':')) {
+    finalModel = modelOrContext;
+  } else {
+    finalContext = modelOrContext;
+  }
 
   // Try backend first
   try {

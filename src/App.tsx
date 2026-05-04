@@ -199,6 +199,7 @@ export default function App() {
         <NotesForClaude
           userEdits={userEdits}
           backendAvailable={backendAvailable}
+          data={data}
           onJournalChange={(journal: NoteEntry[]) =>
             setUserEdits({ ...userEdits, noteJournal: journal })
           }
@@ -215,7 +216,7 @@ export default function App() {
       )}
 
       {activeTab === 'ai' && isAdmin && (
-        <GeminiChat backendAvailable={backendAvailable} />
+        <GeminiChat backendAvailable={backendAvailable} data={data} userEdits={userEdits} />
       )}
 
       <EditModal
