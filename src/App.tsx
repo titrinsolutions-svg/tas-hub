@@ -11,16 +11,16 @@ import { EmailTemplates } from './components/EmailTemplates';
 import { QuickUpdate } from './components/QuickUpdate';
 import { GeminiChat } from './components/GeminiChat';
 import { EditModal } from './components/EditModal';
-import { Project, WeeklyAction, Invoice } from './types';
-import { saveNotesForClaude } from './lib/api';
+import { Project, WeeklyAction, Invoice, NoteEntry } from './types';
 
 export default function App() {
-  const { data, userEdits, setUserEdits, backendAvailable, syncStatus } = useAppData();
-  const [role, setRole] = useState<UserRole | null>(() => sessionStorage.getItem('tas_role') as UserRole | null);
+  const [role, setRole] = useState<UserRole | null>(
+    () => sessionStorage.getItem('tas_role') as UserRole | null
+  );
+  const { data, userEdits, setUserEdits, backendAvailable, syncStatus } = useAppData(role);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isEditMode, setIsEditMode] = useState(false);
 
-  // Modal State
   const [modalConfig, setModalConfig] = useState<{
     isOpen: boolean;
     title: string;
@@ -28,18 +28,11 @@ export default function App() {
     data: any;
     isCustom: boolean;
     index?: number;
-  }>({
-    isOpen: false,
-    title: '',
-    type: 'project',
-    data: null,
-    isCustom: false
-  });
+  }>({ isOpen: false, title: '', type: 'project', data: null, isCustom: false });
 
   const handleUnlock = (userRole: UserRole) => {
     sessionStorage.setItem('tas_role', userRole);
     setRole(userRole);
-    // Field tech starts on field form; admin starts on dashboard
     setActiveTab(userRole === 'field' ? 'field' : 'dashboard');
   };
 
@@ -50,45 +43,47 @@ export default function App() {
 
   const isAdmin = role === 'admin';
 
+  // Build a text snapshot of the current state for clipboard sync / Claude paste-in
   const handleSync = async () => {
-    const completed = userEdits.completedActions.map(id => data.weeklyActions.find(a => a.id === id)).filter(Boolean);
-    const deleted = userEdits.deletedActions.map(id => data.weeklyActions.find(a => a.id === id)).filter(Boolean);
+    const completed = userEdits.completedActions
+      .map(id => data.weeklyActions.find(a => a.id === id))
+      .filter(Boolean);
+    const deleted = userEdits.deletedActions
+      .map(id => data.weeklyActions.find(a => a.id === id))
+      .filter(Boolean);
+
+    const journalText = (userEdits.noteJournal || [])
+      .filter(n => !n.resolved)
+      .map(n => `  [${n.author.toUpperCase()} ${n.ts.slice(0, 10)}] ${n.text}`)
+      .join('\n');
 
     const lines = [
       '=== TAS HUB — SYNC TO CLAUDE ===',
       `Date: ${new Date().toLocaleDateString('en-CA')}`,
       '',
-      '📝 NOTES FROM TISH:',
-      userEdits.notesForClaude || '(none)',
+      '📝 OPEN JOURNAL ENTRIES:',
+      journalText || '  (none)',
       '',
       `✓ COMPLETED ACTIONS (${completed.length}):`,
       ...completed.map(a => `  • [${a?.project}] ${a?.task}`),
       '',
-      `✕ DELETED ACTIONS (${deleted.length}):`,
+      `✕ REMOVED ACTIONS (${deleted.length}):`,
       ...deleted.map(a => `  • [${a?.project}] ${a?.task}`),
       '',
       '=== END SYNC ==='
     ];
 
-    const syncText = lines.join('\n');
-    navigator.clipboard.writeText(syncText);
-
-    // Also save notes to Firebase for Claude's scheduled tasks
-    if (backendAvailable && userEdits.notesForClaude) {
-      await saveNotesForClaude(userEdits.notesForClaude);
-    }
-
-    alert('✓ Copied to clipboard! Paste into Claude.\n' + (backendAvailable ? '✓ Notes saved to backend.' : ''));
+    navigator.clipboard.writeText(lines.join('\n'));
+    alert('✓ Copied to clipboard — paste into Claude.');
   };
 
-  // Tab switching — field tech can only access dashboard, projects, field form
   const FIELD_TABS = ['dashboard', 'projects', 'field'];
   const handleTabChange = (tab: string) => {
     if (!isAdmin && !FIELD_TABS.includes(tab)) return;
     setActiveTab(tab);
   };
 
-  // CRUD Handlers
+  // ── Action handlers ─────────────────────────────────────────────────────────
   const toggleAction = (id: string | number) => {
     const completed = [...userEdits.completedActions];
     const idx = completed.indexOf(id);
@@ -108,48 +103,32 @@ export default function App() {
 
   const addAction = (lane: 'now' | 'week' | 'watching') => {
     setModalConfig({
-      isOpen: true,
-      title: 'Add Action Item',
-      type: 'action',
-      isCustom: true,
+      isOpen: true, title: 'Add Action Item', type: 'action', isCustom: true,
       data: { lane, pri: 'm', project: '', task: '' }
     });
   };
 
   const saveModalChanges = () => {
-    const { type, data: modalData, isCustom } = modalConfig;
-
-    if (type === 'action') {
-      if (isCustom) {
-        const newAction = { ...modalData, id: `ca_${Date.now()}` };
-        setUserEdits({ ...userEdits, customActions: [...userEdits.customActions, newAction] });
-      }
+    const { type, data: md, isCustom } = modalConfig;
+    if (type === 'action' && isCustom) {
+      setUserEdits({ ...userEdits, customActions: [...userEdits.customActions, { ...md, id: `ca_${Date.now()}` }] });
     } else if (type === 'project') {
       if (isCustom) {
-        const newProject = { ...modalData, id: `cp_${Date.now()}` };
-        setUserEdits({ ...userEdits, customProjects: [...userEdits.customProjects, newProject] });
+        setUserEdits({ ...userEdits, customProjects: [...userEdits.customProjects, { ...md, id: `cp_${Date.now()}` }] });
       } else {
-        const overrides = { ...userEdits.projectOverrides };
-        overrides[modalData.name] = modalData;
-        setUserEdits({ ...userEdits, projectOverrides: overrides });
+        setUserEdits({ ...userEdits, projectOverrides: { ...userEdits.projectOverrides, [md.name]: md } });
       }
     } else if (type === 'invoice') {
       if (isCustom) {
-        const newInvoice = { ...modalData, id: `ci_${Date.now()}` };
-        setUserEdits({ ...userEdits, customInvoices: [...userEdits.customInvoices, newInvoice] });
+        setUserEdits({ ...userEdits, customInvoices: [...userEdits.customInvoices, { ...md, id: `ci_${Date.now()}` }] });
       } else {
-        const overrides = { ...userEdits.invoiceOverrides };
-        overrides[modalData.num] = modalData;
-        setUserEdits({ ...userEdits, invoiceOverrides: overrides });
+        setUserEdits({ ...userEdits, invoiceOverrides: { ...userEdits.invoiceOverrides, [md.num]: md } });
       }
     }
-
     setModalConfig({ ...modalConfig, isOpen: false });
   };
 
-  if (!role) {
-    return <PinGate onUnlock={handleUnlock} />;
-  }
+  if (!role) return <PinGate onUnlock={handleUnlock} />;
 
   return (
     <Layout
@@ -168,13 +147,14 @@ export default function App() {
         <Dashboard
           data={data}
           userEdits={userEdits}
+          isAdmin={isAdmin}
           isEditMode={isEditMode}
           onToggleAction={toggleAction}
           onDeleteAction={deleteAction}
           onAddAction={addAction}
-          onDeleteUpcoming={(i) => setUserEdits({ ...userEdits, deletedUpcoming: [...userEdits.deletedUpcoming, i] })}
-          onAddUpcoming={() => {}}
-          onNotesChange={(notes) => setUserEdits({ ...userEdits, notesForClaude: notes })}
+          onDeleteUpcoming={(i) =>
+            setUserEdits({ ...userEdits, deletedUpcoming: [...userEdits.deletedUpcoming, i] })
+          }
           onSync={handleSync}
         />
       )}
@@ -185,58 +165,58 @@ export default function App() {
           userEdits={userEdits}
           isEditMode={isEditMode}
           onAddProject={() => setModalConfig({
-            isOpen: true,
-            title: 'Add Project',
-            type: 'project',
-            isCustom: true,
+            isOpen: true, title: 'Add Project', type: 'project', isCustom: true,
             data: { name: '', client: '', status: 'active', badge: 'fp', badgeLabel: 'Farm Plan', note: '', action: '', actionType: 'normal' }
           })}
           onEditProject={(i, isCustom) => setModalConfig({
-            isOpen: true,
-            title: 'Edit Project',
-            type: 'project',
-            isCustom,
-            index: i,
-            data: data.projects[i]
+            isOpen: true, title: 'Edit Project', type: 'project', isCustom, index: i, data: data.projects[i]
           })}
-          onDeleteProject={(name) => setUserEdits({ ...userEdits, deletedProjects: [...userEdits.deletedProjects, name] })}
+          onDeleteProject={(name) =>
+            setUserEdits({ ...userEdits, deletedProjects: [...userEdits.deletedProjects, name] })
+          }
         />
       )}
 
-      {activeTab === 'invoices' && (
+      {activeTab === 'invoices' && isAdmin && (
         <Invoices
           data={data}
           userEdits={userEdits}
           isEditMode={isEditMode}
           onAddInvoice={() => setModalConfig({
-            isOpen: true,
-            title: 'Add Invoice',
-            type: 'invoice',
-            isCustom: true,
+            isOpen: true, title: 'Add Invoice', type: 'invoice', isCustom: true,
             data: { num: '', client: '', issued: new Date().toLocaleDateString('en-CA'), amount: '$0', status: 'outstanding' }
           })}
-          onMarkPaid={(num) => {
-            const overrides = { ...userEdits.invoiceOverrides };
-            overrides[num] = { status: 'paid' };
-            setUserEdits({ ...userEdits, invoiceOverrides: overrides });
-          }}
-          onDeleteInvoice={(num) => setUserEdits({ ...userEdits, deletedInvoices: [...userEdits.deletedInvoices, num] })}
+          onMarkPaid={(num) =>
+            setUserEdits({ ...userEdits, invoiceOverrides: { ...userEdits.invoiceOverrides, [num]: { status: 'paid' } } })
+          }
+          onDeleteInvoice={(num) =>
+            setUserEdits({ ...userEdits, deletedInvoices: [...userEdits.deletedInvoices, num] })
+          }
         />
       )}
 
-      {activeTab === 'notes' && (
+      {activeTab === 'notes' && isAdmin && (
         <NotesForClaude
           userEdits={userEdits}
-          onNotesChange={(notes) => setUserEdits({ ...userEdits, notesForClaude: notes })}
+          backendAvailable={backendAvailable}
+          onJournalChange={(journal: NoteEntry[]) =>
+            setUserEdits({ ...userEdits, noteJournal: journal })
+          }
           onSync={handleSync}
-          onClear={() => setUserEdits({ ...userEdits, notesForClaude: '' })}
         />
       )}
 
-      {activeTab === 'field' && <FieldForm />}
-      {activeTab === 'email' && <EmailTemplates data={data} />}
-      {activeTab === 'quick' && <QuickUpdate data={data} backendAvailable={backendAvailable} />}
-      {activeTab === 'ai' && isAdmin && <GeminiChat backendAvailable={backendAvailable} />}
+      {activeTab === 'field' && <FieldForm role={role} />}
+
+      {activeTab === 'email' && isAdmin && <EmailTemplates data={data} />}
+
+      {activeTab === 'quick' && isAdmin && (
+        <QuickUpdate data={data} backendAvailable={backendAvailable} />
+      )}
+
+      {activeTab === 'ai' && isAdmin && (
+        <GeminiChat backendAvailable={backendAvailable} />
+      )}
 
       <EditModal
         isOpen={modalConfig.isOpen}

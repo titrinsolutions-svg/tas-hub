@@ -74,8 +74,23 @@ interface TestPit {
   photo?: PhotoData;
 }
 
-export function FieldForm() {
-  const [session, setSession] = useState({
+const FIELD_DRAFT_KEY = 'tas_field_draft';
+
+interface FieldFormProps {
+  role?: 'admin' | 'field';
+}
+
+export function FieldForm({ role = 'field' }: FieldFormProps) {
+  const loadDraft = () => {
+    try {
+      const saved = localStorage.getItem(FIELD_DRAFT_KEY);
+      return saved ? JSON.parse(saved) : null;
+    } catch { return null; }
+  };
+
+  const draft = loadDraft();
+
+  const [session, setSession] = useState(draft?.session || {
     address: '',
     fileNumber: '',
     reportType: 'Site Assessment',
@@ -84,9 +99,9 @@ export function FieldForm() {
     weather: 'Sunny'
   });
 
-  const [photos, setPhotos] = useState<PhotoData[]>([]);
-  const [testPits, setTestPits] = useState<TestPit[]>([]);
-  const [observations, setObservations] = useState({
+  const [photos, setPhotos] = useState<PhotoData[]>(draft?.photos || []);
+  const [testPits, setTestPits] = useState<TestPit[]>(draft?.testPits || []);
+  const [observations, setObservations] = useState(draft?.observations || {
     drainage: 'Well Drained',
     smell: 'None',
     setbacks: 'Compliant',
@@ -94,6 +109,36 @@ export function FieldForm() {
     issues: '',
     generalNotes: ''
   });
+  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(draft?.savedAt || null);
+
+  const saveDraft = (updates: { session?: typeof session; testPits?: typeof testPits; observations?: typeof observations }) => {
+    const payload = {
+      session: updates.session ?? session,
+      testPits: updates.testPits ?? testPits,
+      observations: updates.observations ?? observations,
+      savedAt: new Date().toISOString(),
+    };
+    localStorage.setItem(FIELD_DRAFT_KEY, JSON.stringify(payload));
+    setDraftSavedAt(payload.savedAt);
+  };
+
+  const clearDraft = () => {
+    localStorage.removeItem(FIELD_DRAFT_KEY);
+    setDraftSavedAt(null);
+  };
+
+  // Auto-save session, testPits, observations to localStorage whenever they change.
+  // Photos are excluded (can be large base64 strings).
+  useEffect(() => {
+    const payload = {
+      session,
+      testPits: testPits.map(p => ({ ...p, photo: undefined })), // exclude photo blobs
+      observations,
+      savedAt: new Date().toISOString(),
+    };
+    localStorage.setItem(FIELD_DRAFT_KEY, JSON.stringify(payload));
+    setDraftSavedAt(payload.savedAt);
+  }, [session, testPits, observations]);
 
   const [isCapturing, setIsCapturing] = useState(false);
   const [gpsStatus, setGpsStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -498,16 +543,22 @@ SIGNATURE: ${signature ? 'Captured' : 'Pending'}
         <div>
           <h1 className="text-3xl font-black text-brand-blue tracking-tight">Field Data Collection</h1>
           <p className="text-slate-500 font-medium">Professional site assessment & soil logging</p>
+          {draftSavedAt && (
+            <p className="text-[10px] font-bold text-brand-green uppercase tracking-widest mt-1 flex items-center gap-1">
+              <CheckCircle2 className="w-3 h-3" />
+              Draft auto-saved {new Date(draftSavedAt).toLocaleTimeString('en-CA', { hour: 'numeric', minute: '2-digit' })}
+            </p>
+          )}
         </div>
         <div className="flex gap-2">
-          <button 
-            onClick={clearForm}
+          <button
+            onClick={() => { clearForm(); clearDraft(); }}
             className="flex items-center gap-2 px-4 py-2 text-slate-500 hover:text-red-600 font-bold text-sm transition-colors"
           >
             <RotateCcw className="w-4 h-4" />
             Reset
           </button>
-          <button 
+          <button
             onClick={generateNotesCard}
             className="flex items-center gap-2 px-6 py-2 bg-brand-blue text-white rounded-xl font-bold shadow-lg shadow-brand-blue/20 hover:scale-105 transition-transform"
           >

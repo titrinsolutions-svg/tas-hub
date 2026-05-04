@@ -100,6 +100,17 @@ export interface AppData {
   emailTemplates: EmailTemplate[];
 }
 
+export type NoteAuthor = 'tish' | 'ai' | 'field';
+
+export interface NoteEntry {
+  id: string;
+  author: NoteAuthor;
+  ts: string; // ISO timestamp
+  text: string;
+  tags?: string[];
+  resolved?: boolean;
+}
+
 export interface UserEdits {
   lastManualEdit?: string;
   completedActions: (number | string)[];
@@ -114,5 +125,6 @@ export interface UserEdits {
   customInvoices: Invoice[];
   deletedUpcoming: number[];
   customUpcoming: { id: string; text: string }[];
-  notesForClaude: string;
+  notesForClaude: string; // legacy free-form notes (kept for backwards compat)
+  noteJournal: NoteEntry[]; // structured two-way comms log
 }

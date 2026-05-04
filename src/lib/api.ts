@@ -1,11 +1,28 @@
 /**
  * TAS Hub API client
- * Connects portal to the Node.js backend (Gmail, Drive, Firebase, Gemini)
+ * Talks to the backend (Gmail, Firebase, etc.) for everything that needs server-side
+ * keys, and falls back to direct Gemini API calls in the browser for AI features
+ * when the backend is offline.
  */
+
+import { GoogleGenAI } from '@google/genai';
 
 // Backend URL — set VITE_API_URL in .env for production (Render URL)
 export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const API_KEY = import.meta.env.VITE_API_KEY || 'tas-hub-local-key-2026';
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
+
+// Lazy-init the Gemini client only if a key is available.
+let _genai: GoogleGenAI | null = null;
+function getGenAI(): GoogleGenAI | null {
+  if (!GEMINI_API_KEY) return null;
+  if (!_genai) _genai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+  return _genai;
+}
+
+export function hasDirectGeminiAccess(): boolean {
+  return Boolean(GEMINI_API_KEY);
+}
 
 async function apiFetch(path: string, options: RequestInit = {}) {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -153,12 +170,16 @@ export async function searchEmails(query: string, max = 10): Promise<GmailMessag
   }
 }
 
-// ─── Ollama AI (Local) ────────────────────────────────────────────────────────
+// ─── AI Chat ─────────────────────────────────────────────────────────────────
+// Tries the backend first (which can use Ollama, Gemini server-side, custom prompts,
+// etc.), then falls back to direct Gemini in the browser if the backend is offline.
 
 export interface ChatMessage {
   role: 'user' | 'model';
   content: string;
 }
+
+const SYSTEM_PROMPT_TAS = `You are an executive assistant for Tish Titina, the founder of Titrin AgriSoil Solutions Ltd. — an agri-soil consulting firm in BC, Canada working on Farm Plans, ALC applications, FQA reports, CEMP, SFU, and related land/agriculture work. Be direct, concrete, and actionable. When asked for emails, write them in Tish's voice: warm but professional, not corporate. Avoid filler. Format with short paragraphs and clear next steps.`;
 
 export async function geminiChat(
   message: string,
@@ -166,20 +187,40 @@ export async function geminiChat(
   modelOrContext?: string,
   context?: string
 ): Promise<string> {
-  // Support both old (context) and new (model) parameter for backwards compatibility
   const finalModel = modelOrContext?.includes(':') ? modelOrContext : undefined;
   const finalContext = !modelOrContext?.includes(':') ? modelOrContext : context;
 
-  const { response } = await apiFetch('/api/ollama/chat', {
-    method: 'POST',
-    body: JSON.stringify({
-      message,
-      history,
-      context: finalContext,
-      model: finalModel, // Pass the selected model to backend
-    }),
-  });
-  return response;
+  // Try backend first
+  try {
+    const { response } = await apiFetch('/api/ollama/chat', {
+      method: 'POST',
+      body: JSON.stringify({
+        message,
+        history,
+        context: finalContext,
+        model: finalModel,
+      }),
+    });
+    return response;
+  } catch (backendErr) {
+    // Backend down — try direct Gemini if a key is configured
+    const genai = getGenAI();
+    if (!genai) throw backendErr;
+
+    const contents = [
+      ...history.map(m => ({ role: m.role === 'model' ? 'model' : 'user', parts: [{ text: m.content }] })),
+      { role: 'user', parts: [{ text: message }] },
+    ];
+
+    const result = await genai.models.generateContent({
+      model: 'gemini-2.0-flash-exp',
+      contents,
+      config: {
+        systemInstruction: finalContext ? `${SYSTEM_PROMPT_TAS}\n\nAdditional context:\n${finalContext}` : SYSTEM_PROMPT_TAS,
+      },
+    });
+    return result.text || '';
+  }
 }
 
 export interface EmailDraftRequest {
@@ -197,11 +238,39 @@ export interface EmailDraftResponse {
 }
 
 export async function generateEmailDraft(params: EmailDraftRequest): Promise<EmailDraftResponse> {
-  const { draft } = await apiFetch('/api/ollama/email-draft', {
-    method: 'POST',
-    body: JSON.stringify(params),
-  });
-  return draft;
+  // Try backend
+  try {
+    const { draft } = await apiFetch('/api/ollama/email-draft', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+    return draft;
+  } catch (backendErr) {
+    const genai = getGenAI();
+    if (!genai) throw backendErr;
+
+    const prompt = `Draft a professional email from Tish at Titrin AgriSoil Solutions about the following:
+
+Project: ${params.projectName || 'General'}
+Client: ${params.clientName || 'N/A'}
+Type: ${params.type || 'Update'}
+Notes: ${params.context || params.notes || ''}
+
+Respond with ONLY a JSON object: {"subject": "...", "body": "..."}. No prose, no markdown fences.`;
+
+    const result = await genai.models.generateContent({
+      model: 'gemini-2.0-flash-exp',
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      config: { systemInstruction: SYSTEM_PROMPT_TAS, responseMimeType: 'application/json' },
+    });
+    const text = result.text || '{}';
+    try {
+      const parsed = JSON.parse(text);
+      return { subject: parsed.subject || `TAS Update: ${params.projectName}`, body: parsed.body || '' };
+    } catch {
+      return { subject: `TAS Update: ${params.projectName}`, body: text };
+    }
+  }
 }
 
 // ─── Projects ─────────────────────────────────────────────────────────────────

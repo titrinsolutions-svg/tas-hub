@@ -2,8 +2,24 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { AppData, UserEdits, Invoice } from '../types';
 import { INITIAL_DATA } from '../constants';
 import { loadHubData, saveHubData, checkBackendHealth } from '../lib/api';
+import { UserRole } from '../components/PinGate';
 
 const UE_KEY = 'tas_hub_ue';
+
+// Strip sentences that mention money, invoices, retainers, or payments —
+// field techs see operational notes only, never financial info.
+const FINANCIAL_TERMS = ['$', 'invoice', 'payment', 'retainer', 'paid', 'owed', '💰'];
+function stripFinancials(text: string): string {
+  if (!text) return text;
+  return text
+    .split(/(?<=[.!?])\s+/)
+    .filter(s => {
+      const lower = s.toLowerCase();
+      return !FINANCIAL_TERMS.some(term => lower.includes(term));
+    })
+    .join(' ')
+    .trim();
+}
 
 const DEFAULT_USER_EDITS: UserEdits = {
   completedActions: [],
@@ -19,9 +35,10 @@ const DEFAULT_USER_EDITS: UserEdits = {
   deletedUpcoming: [],
   customUpcoming: [],
   notesForClaude: '',
+  noteJournal: [],
 };
 
-export function useAppData() {
+export function useAppData(role: UserRole | null = 'admin') {
   const [userEdits, setUserEditsState] = useState<UserEdits>(() => {
     try {
       const saved = localStorage.getItem(UE_KEY);
@@ -98,6 +115,33 @@ export function useAppData() {
   useEffect(() => {
     const merged: AppData = JSON.parse(JSON.stringify(INITIAL_DATA));
 
+    // Field tech: strip all admin/financial data before any merge work happens.
+    // This ensures even the in-memory data structure has nothing sensitive,
+    // not just the UI being hidden.
+    if (role === 'field') {
+      merged.invoices = {
+        outstanding: [],
+        paid: [],
+        unmatched: [],
+        totals: { outstanding: '$0', paidConfirmed: '$0', unmatchedReceipts: '$0', totalInvoiced2026: '$0' },
+      };
+      merged.moneyTracker = { incoming: [], outstanding: [] };
+      merged.unmatched = [];
+      merged.resolved = [];
+      merged.emailTemplates = [];
+      merged.upcoming = [];
+      merged.weeklyActions = [];
+      merged.stats = { ...merged.stats, outstanding: '$0', received: '$0' };
+      // Strip financial mentions out of project notes/actions for field tech
+      merged.projects = merged.projects.map(p => ({
+        ...p,
+        note: stripFinancials(p.note),
+        action: stripFinancials(p.action),
+      }));
+      setMergedData(merged);
+      return;
+    }
+
     // Merge Projects
     merged.projects = [
       ...INITIAL_DATA.projects
@@ -159,7 +203,7 @@ export function useAppData() {
     ];
 
     setMergedData(merged);
-  }, [userEdits]);
+  }, [userEdits, role]);
 
   return {
     data: mergedData,
