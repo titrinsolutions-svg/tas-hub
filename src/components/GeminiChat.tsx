@@ -2,12 +2,15 @@ import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Sparkles, Send, Loader2, Bot, User,
-  Trash2, Copy, CheckCircle2, AlertCircle, ChevronDown
+  Trash2, Copy, CheckCircle2, AlertCircle, ChevronDown, Zap
 } from 'lucide-react';
-import { geminiChat, ChatMessage } from '../lib/api';
+import { geminiChat, hasDirectGeminiAccess, ChatMessage } from '../lib/api';
+import { AppData, UserEdits } from '../types';
 
 interface GeminiChatProps {
   backendAvailable: boolean;
+  data: AppData;
+  userEdits: UserEdits;
 }
 
 const QUICK_PROMPTS = [
@@ -15,28 +18,49 @@ const QUICK_PROMPTS = [
   'Draft a project status update email for Mandeville',
   'What invoices are outstanding and overdue?',
   'Summarize what I need to do this week',
-  'Help me write a follow-up email for a client who hasn\'t responded',
+  "Help me write a follow-up email for a client who hasn't responded",
 ];
 
-// Available AI models (newest first)
-const AVAILABLE_MODELS = [
-  { id: 'gemma4:latest', name: 'Gemma 4 (Latest)', description: 'Google\'s newest model - 9.6GB' },
-  { id: 'qwen3.5:latest', name: 'Qwen 3.5 (Latest)', description: 'Latest Qwen reasoning - 6.6GB' },
-  { id: 'qwen3-coder:30b', name: 'Qwen 3-Coder (Largest)', description: 'Most powerful - 18GB' },
-  { id: 'qwen2.5:latest', name: 'Qwen 2.5', description: 'Excellent reasoning - 4.7GB' },
-  { id: 'mistral:latest', name: 'Mistral (Balanced)', description: 'Quality + speed - 4.4GB' },
-  { id: 'neural-chat:latest', name: 'Neural Chat (Intel)', description: 'Business optimized - 4.1GB' },
-  { id: 'llama2-uncensored:latest', name: 'LLaMA 2 Unrestricted', description: 'Meta\'s model - 3.8GB' },
-  { id: 'gemma3:4b', name: 'Gemma 3 (Lightweight)', description: 'Fast & small - 3.3GB' },
+// Ollama models (shown when backend is available)
+const OLLAMA_MODELS = [
+  { id: 'gemma4:latest', name: 'Gemma 4', description: "Google's newest — 9.6 GB" },
+  { id: 'qwen3.5:latest', name: 'Qwen 3.5', description: 'Latest Qwen reasoning — 6.6 GB' },
+  { id: 'qwen2.5:latest', name: 'Qwen 2.5', description: 'Excellent reasoning — 4.7 GB' },
+  { id: 'mistral:latest', name: 'Mistral', description: 'Quality + speed — 4.4 GB' },
+  { id: 'gemma3:4b', name: 'Gemma 3', description: 'Fast & lightweight — 3.3 GB' },
 ];
 
-export function GeminiChat({ backendAvailable }: GeminiChatProps) {
+function buildContext(data: AppData, userEdits: UserEdits): string {
+  const open = data.weeklyActions.filter(a => !userEdits.completedActions.includes(a.id!));
+  const lines = [
+    `Today: ${new Date().toLocaleDateString('en-CA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`,
+    '',
+    `=== ACTIVE PROJECTS (${data.projects.length}) ===`,
+    ...data.projects.map(p => `- ${p.name} | client: ${p.client} | status: ${p.status} | ${p.note}`.slice(0, 280)),
+    '',
+    `=== OPEN ACTIONS (${open.length}) ===`,
+    ...open.map(a => `[${a.lane.toUpperCase()}/${a.pri.toUpperCase()}] ${a.project} :: ${a.task}`.slice(0, 300)),
+    '',
+    `=== OUTSTANDING INVOICES ===`,
+    `Total: ${data.invoices.totals.outstanding}`,
+    ...data.invoices.outstanding.map(i => `#${i.num} ${i.client} — ${i.amount} (issued ${i.issued})`),
+    '',
+    `=== UPCOMING ===`,
+    ...data.upcoming.slice(0, 10),
+  ];
+  return lines.join('\n').slice(0, 12000); // cap context size
+}
+
+export function GeminiChat({ backendAvailable, data, userEdits }: GeminiChatProps) {
+  const directAvailable = hasDirectGeminiAccess();
+  const aiAvailable = backendAvailable || directAvailable;
+
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [copiedId, setCopiedId] = useState<number | null>(null);
-  const [selectedModel, setSelectedModel] = useState(AVAILABLE_MODELS[0].id); // Default: Gemma 4
+  const [selectedModel, setSelectedModel] = useState(OLLAMA_MODELS[0].id);
   const [showModelSelector, setShowModelSelector] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -47,19 +71,17 @@ export function GeminiChat({ backendAvailable }: GeminiChatProps) {
 
   const send = async (text?: string) => {
     const messageText = text || input.trim();
-    if (!messageText || isLoading) return;
-
+    if (!messageText || isLoading || !aiAvailable) return;
     setInput('');
     setError('');
-
     const userMessage: ChatMessage = { role: 'user', content: messageText };
     const updatedHistory = [...messages, userMessage];
     setMessages(updatedHistory);
     setIsLoading(true);
-
     try {
-      // Send the selected model to the backend
-      const response = await geminiChat(messageText, messages, selectedModel);
+      const modelArg = backendAvailable ? selectedModel : undefined;
+      const ctx = buildContext(data, userEdits);
+      const response = await geminiChat(messageText, messages, modelArg, ctx);
       setMessages([...updatedHistory, { role: 'model', content: response }]);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to get response');
@@ -70,10 +92,7 @@ export function GeminiChat({ backendAvailable }: GeminiChatProps) {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      send();
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
   };
 
   const copyMessage = (content: string, index: number) => {
@@ -82,38 +101,30 @@ export function GeminiChat({ backendAvailable }: GeminiChatProps) {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const clearChat = () => {
-    setMessages([]);
-    setError('');
-  };
+  const formatMessage = (content: string) =>
+    content.split('\n').map((line, i) => {
+      const html = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+      return <p key={i} className="mb-1 last:mb-0" dangerouslySetInnerHTML={{ __html: html || '&nbsp;' }} />;
+    });
 
-  const formatMessage = (content: string) => {
-    // Basic markdown: bold, line breaks
-    return content
-      .split('\n')
-      .map((line, i) => {
-        const formatted = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-        return <p key={i} className="mb-1 last:mb-0" dangerouslySetInnerHTML={{ __html: formatted || '&nbsp;' }} />;
-      });
-  };
-
-  if (!backendAvailable) {
+  if (!aiAvailable) {
     return (
       <div className="max-w-2xl mx-auto space-y-8 pb-12">
         <h1 className="text-2xl font-black text-slate-900 tracking-tight">AI Assistant</h1>
-        <div className="bg-amber-50 border border-amber-200 rounded-3xl p-8 text-center space-y-3">
+        <div className="bg-amber-50 border border-amber-200 rounded-3xl p-8 text-center space-y-4">
           <AlertCircle className="w-10 h-10 text-amber-500 mx-auto" />
-          <p className="font-black text-amber-800">Backend Offline</p>
+          <p className="font-black text-amber-800">AI Unavailable</p>
           <p className="text-sm text-amber-700">
-            The TAS Hub backend needs to be running to use the AI assistant.
-            Start the server and refresh to connect.
+            Start the TAS Hub backend <strong>or</strong> set <code className="bg-amber-100 px-1 rounded">VITE_GEMINI_API_KEY</code> in your <code className="bg-amber-100 px-1 rounded">.env.local</code> to enable direct Gemini access.
           </p>
         </div>
       </div>
     );
   }
 
-  const currentModelName = AVAILABLE_MODELS.find(m => m.id === selectedModel)?.name || 'Unknown';
+  const modeLabel = backendAvailable
+    ? `Ollama · ${OLLAMA_MODELS.find(m => m.id === selectedModel)?.name || selectedModel}`
+    : 'Gemini 2.0 Flash (Direct)';
 
   return (
     <div className="max-w-2xl mx-auto flex flex-col" style={{ height: 'calc(100vh - 160px)' }}>
@@ -122,51 +133,51 @@ export function GeminiChat({ backendAvailable }: GeminiChatProps) {
         <div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight">AI Assistant</h1>
           <div className="flex items-center gap-2 mt-0.5">
-            {/* Model Selector */}
-            <div className="relative">
-              <button
-                onClick={() => setShowModelSelector(!showModelSelector)}
-                className="flex items-center gap-2 text-xs text-slate-400 font-bold uppercase tracking-widest hover:text-slate-600 transition-colors px-2 py-1 rounded-lg hover:bg-slate-100"
-              >
-                <span className="text-violet-600">{currentModelName}</span>
-                <ChevronDown className="w-3 h-3" />
-              </button>
-
-              {/* Dropdown Menu */}
-              {showModelSelector && (
-                <motion.div
-                  initial={{ opacity: 0, y: -8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  className="absolute top-full mt-1 left-0 bg-white border border-slate-200 rounded-xl shadow-lg z-50 w-64"
+            {backendAvailable ? (
+              <div className="relative">
+                <button
+                  onClick={() => setShowModelSelector(!showModelSelector)}
+                  className="flex items-center gap-1.5 text-xs text-violet-600 font-bold uppercase tracking-widest hover:text-violet-800 transition-colors px-2 py-1 rounded-lg hover:bg-slate-100"
                 >
-                  {AVAILABLE_MODELS.map((model) => (
-                    <button
-                      key={model.id}
-                      onClick={() => {
-                        setSelectedModel(model.id);
-                        setShowModelSelector(false);
-                      }}
-                      className={`w-full text-left px-3 py-2 text-xs font-medium transition-colors ${
-                        selectedModel === model.id
-                          ? 'bg-violet-50 text-violet-700 border-l-2 border-violet-600'
-                          : 'text-slate-700 hover:bg-slate-50'
-                      }`}
-                    >
-                      <div className="font-bold">{model.name}</div>
-                      <div className="text-[10px] text-slate-500">{model.description}</div>
-                    </button>
-                  ))}
-                </motion.div>
-              )}
-            </div>
+                  {modeLabel}
+                  <ChevronDown className="w-3 h-3" />
+                </button>
+                {showModelSelector && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="absolute top-full mt-1 left-0 bg-white border border-slate-200 rounded-xl shadow-lg z-50 w-64"
+                  >
+                    {OLLAMA_MODELS.map(model => (
+                      <button
+                        key={model.id}
+                        onClick={() => { setSelectedModel(model.id); setShowModelSelector(false); }}
+                        className={`w-full text-left px-3 py-2.5 text-xs font-medium transition-colors border-b last:border-0 border-slate-50 ${
+                          selectedModel === model.id
+                            ? 'bg-violet-50 text-violet-700 border-l-2 border-violet-600'
+                            : 'text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="font-bold">{model.name}</div>
+                        <div className="text-[10px] text-slate-400">{model.description}</div>
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </div>
+            ) : (
+              <span className="flex items-center gap-1.5 text-xs text-emerald-600 font-bold uppercase tracking-widest px-2 py-1 bg-emerald-50 rounded-lg">
+                <Zap className="w-3 h-3" />
+                {modeLabel}
+              </span>
+            )}
             <span className="text-slate-300">·</span>
             <span className="text-xs text-slate-400 font-bold uppercase tracking-widest">TAS Context</span>
           </div>
         </div>
         {messages.length > 0 && (
           <button
-            onClick={clearChat}
+            onClick={() => { setMessages([]); setError(''); }}
             className="flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-slate-700 transition-colors px-3 py-2 rounded-xl hover:bg-slate-100"
           >
             <Trash2 className="w-4 h-4" />
@@ -175,28 +186,19 @@ export function GeminiChat({ backendAvailable }: GeminiChatProps) {
         )}
       </div>
 
-      {/* Messages area */}
+      {/* Messages */}
       <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-1">
         {messages.length === 0 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="space-y-6 pt-4"
-          >
-            {/* Welcome */}
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6 pt-4">
             <div className="flex flex-col items-center gap-3 py-8 text-center">
               <div className="w-14 h-14 bg-gradient-to-br from-violet-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg shadow-violet-500/30">
                 <Sparkles className="w-7 h-7 text-white" />
               </div>
               <div>
-                <p className="font-black text-slate-800 text-lg">Ollama AI for TAS</p>
-                <p className="text-sm text-slate-500 mt-1">
-                  {currentModelName} · Ask about projects, draft emails, get summaries
-                </p>
+                <p className="font-black text-slate-800 text-lg">TAS AI Assistant</p>
+                <p className="text-sm text-slate-500 mt-1">{modeLabel} · Ask about projects, draft emails, get summaries</p>
               </div>
             </div>
-
-            {/* Quick prompts */}
             <div className="space-y-2">
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-1">Quick prompts</p>
               {QUICK_PROMPTS.map((prompt, i) => (
@@ -223,28 +225,19 @@ export function GeminiChat({ backendAvailable }: GeminiChatProps) {
               animate={{ opacity: 1, y: 0 }}
               className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
             >
-              {/* Avatar */}
               <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                msg.role === 'user'
-                  ? 'bg-slate-800'
-                  : 'bg-gradient-to-br from-violet-500 to-purple-600'
+                msg.role === 'user' ? 'bg-brand-blue' : 'bg-gradient-to-br from-violet-500 to-purple-600'
               }`}>
-                {msg.role === 'user'
-                  ? <User className="w-4 h-4 text-white" />
-                  : <Bot className="w-4 h-4 text-white" />
-                }
+                {msg.role === 'user' ? <User className="w-4 h-4 text-white" /> : <Bot className="w-4 h-4 text-white" />}
               </div>
-
-              {/* Bubble */}
-              <div className={`group relative max-w-[80%] ${msg.role === 'user' ? 'items-end' : 'items-start'} flex flex-col`}>
+              <div className={`group relative max-w-[80%] flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                 <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed ${
                   msg.role === 'user'
-                    ? 'bg-slate-800 text-white rounded-tr-sm'
+                    ? 'bg-brand-blue text-white rounded-tr-sm'
                     : 'bg-white border border-slate-200 text-slate-700 rounded-tl-sm shadow-sm'
                 }`}>
                   {formatMessage(msg.content)}
                 </div>
-                {/* Copy button */}
                 <button
                   onClick={() => copyMessage(msg.content, i)}
                   className="absolute -bottom-6 right-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-slate-600"
@@ -259,13 +252,8 @@ export function GeminiChat({ backendAvailable }: GeminiChatProps) {
           ))}
         </AnimatePresence>
 
-        {/* Loading indicator */}
         {isLoading && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="flex gap-3"
-          >
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-3">
             <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center flex-shrink-0">
               <Bot className="w-4 h-4 text-white" />
             </div>
@@ -278,18 +266,12 @@ export function GeminiChat({ backendAvailable }: GeminiChatProps) {
           </motion.div>
         )}
 
-        {/* Error */}
         {error && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-2xl px-4 py-3 text-red-700 text-sm"
-          >
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-2xl px-4 py-3 text-red-700 text-sm">
             <AlertCircle className="w-4 h-4 shrink-0" />
             {error}
           </motion.div>
         )}
-
         <div ref={messagesEndRef} />
       </div>
 
@@ -315,13 +297,9 @@ export function GeminiChat({ backendAvailable }: GeminiChatProps) {
           disabled={!input.trim() || isLoading}
           className="w-10 h-10 bg-violet-600 hover:bg-violet-700 disabled:bg-slate-200 text-white disabled:text-slate-400 rounded-xl flex items-center justify-center transition-colors flex-shrink-0"
         >
-          {isLoading
-            ? <Loader2 className="w-4 h-4 animate-spin" />
-            : <Send className="w-4 h-4" />
-          }
+          {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
         </button>
       </div>
-
       <p className="text-center text-[10px] text-slate-400 mt-2 font-bold uppercase tracking-widest">
         Enter to send · Shift+Enter for new line
       </p>

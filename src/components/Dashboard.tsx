@@ -1,22 +1,20 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import {
   AlertCircle,
   Calendar,
   Eye,
   CheckCircle2,
-  DollarSign,
-  FileWarning,
-  Info,
+  FileText,
   ChevronRight,
   Plus,
   Trash2,
-  FileText,
   Briefcase,
   TrendingUp,
   Clock,
   ArrowUpRight,
-  RefreshCw
+  RefreshCw,
+  DollarSign
 } from 'lucide-react';
 import { AppData, UserEdits, WeeklyAction } from '../types';
 import { cn } from '../lib/utils';
@@ -25,62 +23,58 @@ import { LOGOS } from '../constants';
 interface DashboardProps {
   data: AppData;
   userEdits: UserEdits;
+  isAdmin: boolean;
   isEditMode: boolean;
   onToggleAction: (id: string | number) => void;
   onDeleteAction: (id: string | number, isCustom: boolean) => void;
   onAddAction: (lane: 'now' | 'week' | 'watching') => void;
   onDeleteUpcoming: (index: number) => void;
-  onAddUpcoming: () => void;
-  onNotesChange: (notes: string) => void;
   onSync: () => void;
 }
 
 export function Dashboard({
   data,
   userEdits,
+  isAdmin,
   isEditMode,
   onToggleAction,
   onDeleteAction,
   onAddAction,
   onDeleteUpcoming,
-  onAddUpcoming,
-  onNotesChange,
   onSync
 }: DashboardProps) {
+  const [clock, setClock] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setClock(new Date()), 60000);
+    return () => clearInterval(t);
+  }, []);
+
+  const hour = clock.getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+
   const lanes = [
     { id: 'now', label: 'Do Now', icon: AlertCircle, color: 'text-red-500', bg: 'bg-red-50' },
     { id: 'week', label: 'This Week', icon: Calendar, color: 'text-brand-gold', bg: 'bg-brand-gold/5' },
     { id: 'watching', label: 'Watching', icon: Eye, color: 'text-brand-green', bg: 'bg-brand-green/5' },
   ] as const;
 
-  const stats = [
+  const doNowCount = data.weeklyActions.filter(
+    a => a.lane === 'now' && !userEdits.completedActions.includes(a.id!)
+  ).length;
+
+  const baseStats = [
     { label: 'Active Projects', value: data.projects.length, icon: Briefcase, color: 'text-brand-blue', bg: 'bg-brand-blue/5' },
-    { label: 'Do Now', value: data.weeklyActions.filter(a => a.lane === 'now' && !userEdits.completedActions.includes(a.id!)).length, icon: Clock, color: 'text-red-500', bg: 'bg-red-50' },
+    { label: 'Do Now', value: doNowCount, icon: Clock, color: 'text-red-500', bg: 'bg-red-50' },
     { label: 'Total Actions', value: data.weeklyActions.length, icon: TrendingUp, color: 'text-brand-green', bg: 'bg-brand-green/5' },
   ];
+  const adminStats = [
+    { label: 'Outstanding', value: data.stats.outstanding, icon: DollarSign, color: 'text-brand-gold', bg: 'bg-brand-gold/10' },
+  ];
+  const stats = isAdmin ? [...baseStats, ...adminStats] : baseStats;
 
-  const filteredUpcoming = data.upcoming.filter(item => 
-    !item.toLowerCase().includes('$') && 
-    !item.toLowerCase().includes('invoice') && 
-    !item.toLowerCase().includes('payment') &&
-    !item.toLowerCase().includes('retainer') &&
-    !item.toLowerCase().includes('💰')
-  );
-
-  const sanitizeFinancialInfo = (text: string) => {
-    if (!text) return text;
-    return text
-      .split(/[.!?]+/)
-      .filter(sentence => 
-        !sentence.toLowerCase().includes('$') && 
-        !sentence.toLowerCase().includes('invoice') && 
-        !sentence.toLowerCase().includes('payment') &&
-        !sentence.toLowerCase().includes('retainer') &&
-        !sentence.toLowerCase().includes('💰')
-      )
-      .join('. ')
-      .trim();
-  };
+  // Data filtering happens in useAppData based on role.
+  // Admin sees everything; field tech receives pre-stripped data.
+  const filteredUpcoming = data.upcoming;
 
   return (
     <div className="space-y-8 pb-12">
@@ -96,8 +90,13 @@ export function Dashboard({
             />
           </div>
           <div>
-            <h1 className="text-3xl font-black text-brand-blue tracking-tight">Morning Briefing</h1>
-            <p className="text-slate-500 font-medium">Titrin AgriSoil Solutions • {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+            <h1 className="text-3xl font-black text-brand-blue tracking-tight">{greeting}, Tish</h1>
+            <p className="text-slate-500 font-medium">
+              Titrin AgriSoil Solutions &nbsp;·&nbsp;
+              {clock.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+              &nbsp;·&nbsp;
+              {clock.toLocaleTimeString('en-CA', { hour: 'numeric', minute: '2-digit' })}
+            </p>
           </div>
         </div>
         
@@ -110,7 +109,7 @@ export function Dashboard({
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className={`grid grid-cols-1 gap-4 ${isAdmin ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-3'}`}>
         {stats.map((stat, i) => (
           <motion.div
             key={`stat-${stat.label}`}
@@ -183,7 +182,7 @@ export function Dashboard({
                                 {action.project}
                               </div>
                               <div className="text-sm font-bold text-brand-blue">
-                                {sanitizeFinancialInfo(action.task)}
+                                {action.task}
                               </div>
                             </div>
                           </div>
@@ -224,7 +223,7 @@ export function Dashboard({
                                     {action.project}
                                   </div>
                                   <div className="text-xs font-medium text-slate-500 line-through">
-                                    {sanitizeFinancialInfo(action.task)}
+                                    {action.task}
                                   </div>
                                 </div>
                               </div>
@@ -251,11 +250,7 @@ export function Dashboard({
                 </div>
                 <h2 className="text-lg font-bold text-brand-blue">Upcoming</h2>
               </div>
-              {isEditMode && (
-                <button onClick={onAddUpcoming} className="p-1.5 hover:bg-slate-50 rounded-lg text-slate-400">
-                  <Plus className="w-4 h-4" />
-                </button>
-              )}
+              {/* Upcoming items are added via the Notes/sync flow */}
             </div>
             <div className="space-y-4">
               {filteredUpcoming.length > 0 ? (
@@ -288,34 +283,37 @@ export function Dashboard({
             </div>
           </section>
 
-          {/* Notes for Claude */}
-          <section className="bg-brand-blue rounded-3xl p-6 shadow-xl border border-slate-800">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
+          {/* Notes for AI — shown only to admin */}
+          {isAdmin && (
+            <section className="bg-brand-blue rounded-3xl p-6 shadow-xl border border-slate-800">
+              <div className="flex items-center gap-3 mb-4">
                 <div className="p-2 bg-slate-800 rounded-xl text-brand-green">
                   <FileText className="w-5 h-5" />
                 </div>
                 <h2 className="text-lg font-bold text-white">Notes for AI</h2>
               </div>
+              {(userEdits.noteJournal?.length ?? 0) > 0 ? (
+                <div className="space-y-2 max-h-40 overflow-y-auto mb-4">
+                  {(userEdits.noteJournal || []).slice(-3).map(n => (
+                    <div key={n.id} className="text-xs text-slate-400 bg-slate-900/50 rounded-xl px-3 py-2 line-clamp-2">
+                      <span className="font-black text-slate-300 uppercase">{n.author}</span> — {n.text}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-slate-500 text-xs font-medium mb-4">
+                  No journal entries yet. Use the Notes tab to chat with the AI.
+                </p>
+              )}
               <button
                 onClick={onSync}
-                className="p-2 bg-slate-800 text-slate-400 hover:text-white rounded-lg transition-colors"
-                title="Sync Notes"
+                className="w-full flex items-center justify-center gap-2 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-black uppercase tracking-widest rounded-xl transition-all"
               >
-                <RefreshCw className="w-4 h-4" />
+                <RefreshCw className="w-3.5 h-3.5" />
+                Sync to Clipboard
               </button>
-            </div>
-            <textarea
-              value={userEdits.notesForClaude}
-              onChange={(e) => onNotesChange(e.target.value)}
-              placeholder="Jot things for Claude to pick up on next update..."
-              className="w-full h-48 bg-slate-900/50 border border-slate-800 rounded-2xl p-4 text-sm text-slate-300 font-medium placeholder:text-slate-600 focus:ring-2 focus:ring-brand-green/20 focus:border-brand-green transition-all resize-none"
-            />
-            <div className="mt-4 flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-              <CheckCircle2 className="w-3 h-3 text-brand-green" />
-              Synced with backend
-            </div>
-          </section>
+            </section>
+          )}
         </div>
       </div>
     </div>

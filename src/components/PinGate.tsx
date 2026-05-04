@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Lock, ShieldCheck, ArrowRight, HardHat, Crown } from 'lucide-react';
+import { Lock, ShieldCheck, ArrowRight, HardHat, Crown, Delete } from 'lucide-react';
 import { LOGOS } from '../constants';
 
 export type UserRole = 'admin' | 'field';
@@ -9,24 +9,76 @@ interface PinGateProps {
   onUnlock: (role: UserRole) => void;
 }
 
-const PINS: Record<UserRole, string> = {
-  admin: '8474',
-  field: '8888',
-};
+// PINs come from build-time env vars so they aren't sitting in plain source.
+// Defaults match prior behaviour for first-time setup; override in .env.local.
+const ADMIN_PIN = (import.meta.env.VITE_ADMIN_PIN as string | undefined) || '8474';
+const FIELD_PIN = (import.meta.env.VITE_FIELD_PIN as string | undefined) || '8888';
+
+const LOCKOUT_KEY = 'tas_hub_lockout';
+const MAX_ATTEMPTS = 5;
+const LOCKOUT_MINUTES = 5;
+
+function getLockout(): { until: number; attempts: number } {
+  try {
+    const raw = localStorage.getItem(LOCKOUT_KEY);
+    if (!raw) return { until: 0, attempts: 0 };
+    return JSON.parse(raw);
+  } catch {
+    return { until: 0, attempts: 0 };
+  }
+}
+
+function setLockout(state: { until: number; attempts: number }) {
+  localStorage.setItem(LOCKOUT_KEY, JSON.stringify(state));
+}
 
 export function PinGate({ onUnlock }: PinGateProps) {
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
+  const [lockedUntil, setLockedUntil] = useState<number>(() => getLockout().until);
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const isLocked = lockedUntil > now;
+  const remainingSeconds = Math.max(0, Math.ceil((lockedUntil - now) / 1000));
 
   const handleUnlock = () => {
-    if (!selectedRole) return;
-    if (pin === PINS[selectedRole]) {
+    if (!selectedRole || isLocked) return;
+    const expected = selectedRole === 'admin' ? ADMIN_PIN : FIELD_PIN;
+    if (pin === expected) {
+      setLockout({ until: 0, attempts: 0 });
       onUnlock(selectedRole);
-    } else {
-      setError('Invalid PIN');
-      setPin('');
+      return;
     }
+
+    const state = getLockout();
+    const attempts = state.attempts + 1;
+    if (attempts >= MAX_ATTEMPTS) {
+      const until = Date.now() + LOCKOUT_MINUTES * 60 * 1000;
+      setLockout({ until, attempts: 0 });
+      setLockedUntil(until);
+      setError(`Too many attempts. Locked for ${LOCKOUT_MINUTES} min.`);
+    } else {
+      setLockout({ until: 0, attempts });
+      setError(`Invalid PIN — ${MAX_ATTEMPTS - attempts} attempt(s) left`);
+    }
+    setPin('');
+  };
+
+  const appendDigit = (d: string) => {
+    if (isLocked || pin.length >= 8) return;
+    setPin(pin + d);
+    setError('');
+  };
+
+  const backspace = () => {
+    setPin(pin.slice(0, -1));
+    setError('');
   };
 
   return (
@@ -110,45 +162,67 @@ export function PinGate({ onUnlock }: PinGateProps) {
                 </button>
                 <div className="flex-1 text-center">
                   <span className={`text-xs font-black uppercase tracking-widest ${selectedRole === 'admin' ? 'text-brand-gold' : 'text-brand-green'}`}>
-                    {selectedRole === 'admin' ? '👑 Admin Login' : '🦺 Field Tech Login'}
+                    {selectedRole === 'admin' ? 'Admin Login' : 'Field Tech Login'}
                   </span>
                 </div>
               </div>
 
+              {/* PIN dots */}
               <div className="relative group">
                 <div className={`absolute -inset-1 bg-gradient-to-r ${selectedRole === 'admin' ? 'from-brand-gold to-yellow-300' : 'from-brand-green to-emerald-400'} rounded-2xl blur opacity-20 group-focus-within:opacity-40 transition-opacity`} />
-                <div className="relative">
-                  <input
-                    type="password"
-                    inputMode="numeric"
-                    maxLength={6}
-                    placeholder="••••"
-                    value={pin}
-                    autoFocus
-                    onChange={(e) => { setPin(e.target.value); setError(''); }}
-                    onKeyDown={(e) => e.key === 'Enter' && handleUnlock()}
-                    className="w-full py-6 px-8 text-3xl text-center tracking-[1.5em] bg-slate-900/50 border border-white/10 rounded-2xl text-white outline-none focus:border-white/20 transition-all placeholder:text-slate-700 font-mono"
-                  />
-                  <div className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-500">
-                    <Lock className="w-5 h-5" />
-                  </div>
+                <div className="relative flex items-center justify-center gap-3 py-6 bg-slate-900/50 border border-white/10 rounded-2xl">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <span
+                      key={i}
+                      className={`w-3.5 h-3.5 rounded-full transition-all ${
+                        pin.length > i ? 'bg-white scale-110' : 'bg-white/10'
+                      }`}
+                    />
+                  ))}
                 </div>
               </div>
 
-              <button
-                onClick={handleUnlock}
-                className={`w-full py-5 font-black text-lg rounded-2xl transition-all shadow-xl flex items-center justify-center gap-3 group ${
-                  selectedRole === 'admin'
-                    ? 'bg-brand-gold hover:bg-yellow-400 text-brand-blue'
-                    : 'bg-brand-green hover:bg-emerald-400 text-white'
-                }`}
-              >
-                Authenticate
-                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-              </button>
+              {/* Numeric keypad — better for mobile field use than tiny inputs */}
+              <div className="grid grid-cols-3 gap-2">
+                {['1','2','3','4','5','6','7','8','9'].map((d) => (
+                  <button
+                    key={d}
+                    onClick={() => appendDigit(d)}
+                    disabled={isLocked}
+                    className="py-4 bg-white/5 hover:bg-white/10 active:bg-white/20 disabled:opacity-30 border border-white/10 rounded-xl text-white text-2xl font-black transition-all"
+                  >
+                    {d}
+                  </button>
+                ))}
+                <button
+                  onClick={backspace}
+                  disabled={isLocked || pin.length === 0}
+                  className="py-4 bg-white/5 hover:bg-white/10 disabled:opacity-30 border border-white/10 rounded-xl text-slate-400 flex items-center justify-center transition-all"
+                >
+                  <Delete className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={() => appendDigit('0')}
+                  disabled={isLocked}
+                  className="py-4 bg-white/5 hover:bg-white/10 active:bg-white/20 disabled:opacity-30 border border-white/10 rounded-xl text-white text-2xl font-black transition-all"
+                >
+                  0
+                </button>
+                <button
+                  onClick={handleUnlock}
+                  disabled={isLocked || pin.length < 4}
+                  className={`py-4 rounded-xl text-sm font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${
+                    selectedRole === 'admin'
+                      ? 'bg-brand-gold hover:bg-yellow-400 text-brand-blue disabled:opacity-30'
+                      : 'bg-brand-green hover:bg-emerald-400 text-white disabled:opacity-30'
+                  }`}
+                >
+                  <Lock className="w-4 h-4" />
+                </button>
+              </div>
 
               <AnimatePresence>
-                {error && (
+                {(error || isLocked) && (
                   <motion.div
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -156,7 +230,7 @@ export function PinGate({ onUnlock }: PinGateProps) {
                     className="flex items-center justify-center gap-2 px-4 py-2 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs font-black uppercase tracking-widest"
                   >
                     <ShieldCheck className="w-4 h-4" />
-                    {error}
+                    {isLocked ? `Locked — try again in ${remainingSeconds}s` : error}
                   </motion.div>
                 )}
               </AnimatePresence>

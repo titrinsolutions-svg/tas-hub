@@ -49,22 +49,6 @@ export function Projects({
     new: 'bg-brand-blue',
   };
 
-  const sanitizeFinancialInfo = (text: string) => {
-    if (!text) return text;
-    // Remove sentences or phrases containing $, invoice, payment, retainer, etc.
-    return text
-      .split(/[.!?]+/)
-      .filter(sentence => 
-        !sentence.toLowerCase().includes('$') && 
-        !sentence.toLowerCase().includes('invoice') && 
-        !sentence.toLowerCase().includes('payment') &&
-        !sentence.toLowerCase().includes('retainer') &&
-        !sentence.toLowerCase().includes('💰')
-      )
-      .join('. ')
-      .trim();
-  };
-
   return (
     <div className="space-y-8 pb-12">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -157,7 +141,7 @@ export function Projects({
                   <div>
                     <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Project Overview</h4>
                     <p className="text-base text-slate-600 font-medium leading-relaxed">
-                      {sanitizeFinancialInfo(project.note)}
+                      {project.note}
                     </p>
                   </div>
 
@@ -183,7 +167,7 @@ export function Projects({
                           {project.actionType === 'urgent' ? 'Critical Action' : 'Next Milestone'}
                         </div>
                         <p className="text-base font-black leading-snug tracking-tight">
-                          {sanitizeFinancialInfo(project.action)}
+                          {project.action}
                         </p>
                       </div>
                     </div>
