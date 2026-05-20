@@ -35,7 +35,12 @@ Pull full submission: GET ${base}?id=${s.id}
 
 The field tech captured the minimum that requires being on-site: photos with tape,
 GPS, pit base depth, water table presence + depth, rooting depth, hours since rain,
-and any anomaly notes. Everything else is YOUR job to derive.
+and any anomaly notes. The submission also auto-captured operational context from
+phone-side APIs: weather snapshot (OpenWeatherMap), reverse-geocoded address
+(Nominatim), and sun angle at first photo. Use these for triage only — the report
+itself cites ECCC for weather/precip and your usual sources for soils/climate.
+
+Everything else is YOUR job to derive.
 
 == Derive from aerials + DEM + Google Earth + BC iMap ==
 - Slope aspect (DEM)
@@ -54,12 +59,22 @@ and any anomaly notes. Everything else is YOUR job to derive.
 - Gleying presence + depth + colour
 - Drainage class (Canadian System of Soil Classification, derived from morphology + water table)
 - Photo quality assessment (was the tape visible? Image well-lit? Full pit face shown?)
+- Use the sun angle from rawData.opsContext.sunAtFirstPhoto (elevation + azimuth)
+  to correct for lighting bias in Munsell color estimation — low sun produces
+  warmer color casts; high sun flattens chroma.
 
 == Derive from APIs + research ==
 - PMBC parcel + ALR status (property_research.py)
 - BC Soil Survey provincial mapping (property_research.py)
 - SIFT manual lookup — confirm/revise the provincial soil polygons for the GPS coords
-- Climate normals 1991-2020 — nearest active Env Canada station, name + ID + distance
+- **Climate normals 1991-2020 from ECCC (Environment and Climate Change Canada)**
+  — nearest active station, name + ID + distance. This is the AUTHORITATIVE source
+  for the report's climate table. The submission also carries an OpenWeatherMap
+  snapshot in rawData.opsContext.weather, but use that ONLY for operational triage
+  (e.g. "was the pit logged right after a storm?"). The report cites ECCC, not OWM.
+- **Precipitation history for the dates around field work — pull from ECCC**
+  station data. The submission's opsContext.weather.precip.last24/48/72h is
+  operational only; cite ECCC for liability framing in the drainage register.
 - Prior reports on this PID/address — search TAS Reference Library + Gmail + Drive
 
 == Synthesis ==

@@ -35,7 +35,8 @@ import {
   LOGOS
 } from '../constants';
 import { GoogleGenAI, Type } from "@google/genai";
-import { submitFieldData } from '../lib/api';
+import { submitFieldData, fetchWeather, reverseGeocode, type WeatherSnapshot, type GeocodeResult } from '../lib/api';
+import { sunPosition, describeSun, type SunPosition } from '../lib/sun';
 import type { Project } from '../types';
 
 interface PhotoData {
@@ -207,6 +208,32 @@ export function FieldForm({ role = 'field', projects = [] }: FieldFormProps) {
   const [activePitId, setActivePitId] = useState<string | null>(null);
   const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // ── Auto-captured operational context ─────────────────────────────────
+  const [weather, setWeather] = useState<WeatherSnapshot | null>(null);
+  const [weatherStatus, setWeatherStatus] = useState<'idle' | 'fetching' | 'done' | 'error'>('idle');
+  const [geocode, setGeocode] = useState<GeocodeResult | null>(null);
+  const [sunAtFirstPhoto, setSunAtFirstPhoto] = useState<SunPosition | null>(null);
+
+  // Fire weather + geocode the moment we have a stable GPS lock.
+  // Triggered by photo capture (since photo captures GPS) or pit GPS.
+  const hydrateContextFromGps = async (lat: number, lng: number) => {
+    if (weatherStatus !== 'idle' && weatherStatus !== 'error') return;
+    setWeatherStatus('fetching');
+    try {
+      const [w, g] = await Promise.all([
+        fetchWeather(lat, lng),
+        reverseGeocode(lat, lng),
+      ]);
+      if (w) setWeather(w);
+      if (g) setGeocode(g);
+      setWeatherStatus('done');
+      // Sun angle now
+      setSunAtFirstPhoto(sunPosition(lat, lng, new Date()));
+    } catch {
+      setWeatherStatus('error');
+    }
+  };
 
   const downloadWatermarkedPhoto = async (photo: PhotoData, customLabel?: string, notes?: string) => {
     const canvas = document.createElement('canvas');
@@ -518,6 +545,13 @@ export function FieldForm({ role = 'field', projects = [] }: FieldFormProps) {
           analyzeSoilImage(photoId, base64Data, false);
         }
         setIsCapturing(false);
+
+        // Auto-fetch weather + geocode + sun angle as soon as we have a GPS lock.
+        // This runs once per submission (idempotent — hydrateContextFromGps no-ops if
+        // we've already fetched). Field tech does NOTHING extra for this.
+        if (newPhoto.gps) {
+          hydrateContextFromGps(newPhoto.gps.lat, newPhoto.gps.lng);
+        }
       };
       reader.readAsDataURL(file);
     }
@@ -629,6 +663,14 @@ SIGNATURE: ${signature ? 'Captured' : 'Pending'}
       generalNotes: siteInfo.generalNotes || undefined,
     };
 
+    // Auto-captured operational context — Cowork uses for triage, not as
+    // primary citation. Report citations come from ECCC (Cowork pulls separately).
+    const opsContext = {
+      weather: weather || undefined,
+      reverseGeocode: geocode || undefined,
+      sunAtFirstPhoto: sunAtFirstPhoto || undefined,
+    };
+
     const submission = await submitFieldData({
       submittedBy: role,
       siteAddress: session.address,
@@ -660,6 +702,7 @@ SIGNATURE: ${signature ? 'Captured' : 'Pending'}
           topography: p.topography,
         })),
         signaturePresent: Boolean(signature),
+        opsContext,
       },
     });
 
@@ -871,6 +914,45 @@ SIGNATURE: ${signature ? 'Captured' : 'Pending'}
                 <p className="text-[11px] font-medium text-slate-500">Slope, vegetation, surrounding land uses are derived in Cowork from aerials. Only fill what aerials can't see.</p>
               </div>
             </div>
+
+            {/* Auto-captured context — field tech sees what's been grabbed */}
+            {(weatherStatus !== 'idle' || sunAtFirstPhoto) && (
+              <div className="mb-4 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                <div className="flex items-center gap-2 mb-2">
+                  <Sparkles className="w-3.5 h-3.5 text-brand-blue" />
+                  <span className="text-[10px] font-black text-brand-blue uppercase tracking-widest">Auto-captured context</span>
+                  {weatherStatus === 'fetching' && <Loader2 className="w-3 h-3 animate-spin text-slate-400" />}
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-700">
+                  {geocode?.displayName && (
+                    <div className="col-span-2">
+                      <span className="font-bold text-slate-500">Verified address:</span> {geocode.displayName}
+                    </div>
+                  )}
+                  {weather?.current && (
+                    <>
+                      <div><span className="font-bold text-slate-500">Now:</span> {weather.current.tempC}°C, {weather.current.conditions}, RH {weather.current.humidity}%</div>
+                      <div><span className="font-bold text-slate-500">Wind:</span> {weather.current.windKph} km/h</div>
+                    </>
+                  )}
+                  {weather?.precip && (
+                    <div className="col-span-2">
+                      <span className="font-bold text-slate-500">Rainfall last 24/48/72h:</span> {weather.precip.last24hMm}/{weather.precip.last48hMm}/{weather.precip.last72hMm} mm
+                    </div>
+                  )}
+                  {sunAtFirstPhoto && (
+                    <div className="col-span-2">
+                      <span className="font-bold text-slate-500">Sun:</span> {describeSun(sunAtFirstPhoto)}
+                    </div>
+                  )}
+                  {weather && !weather.configured && (
+                    <div className="col-span-2 text-amber-700 text-[10px]">
+                      ⚠ Weather API key not set in Netlify. Cowork will pull ECCC data instead for the report.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
