@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   FileText, RefreshCw, Trash2, Info, Send, Bot, User as UserIcon,
-  CheckCircle2, Circle, Sparkles, Loader2, AlertCircle
+  CheckCircle2, Circle, Sparkles, Loader2, AlertCircle, Eye, EyeOff
 } from 'lucide-react';
 import { UserEdits, NoteEntry, AppData } from '../types';
 import { cn } from '../lib/utils';
@@ -42,6 +42,7 @@ export function NotesForClaude({ userEdits, backendAvailable, data, onJournalCha
   const [draft, setDraft] = useState('');
   const [askingAI, setAskingAI] = useState(false);
   const [error, setError] = useState('');
+  const [showResolved, setShowResolved] = useState(false);
 
   const journal = useMemo(() => {
     // Migrate legacy free-form notes into a single AI-pending entry on first load
@@ -56,6 +57,10 @@ export function NotesForClaude({ userEdits, backendAvailable, data, onJournalCha
     }
     return [];
   }, [userEdits.noteJournal, userEdits.notesForClaude]);
+
+  const openCount = journal.filter(n => !n.resolved).length;
+  const resolvedCount = journal.length - openCount;
+  const visibleJournal = showResolved ? journal : journal.filter(n => !n.resolved);
 
   const aiAvailable = backendAvailable || hasDirectGeminiAccess();
 
@@ -90,10 +95,14 @@ export function NotesForClaude({ userEdits, backendAvailable, data, onJournalCha
     setError('');
 
     try {
-      const history: ChatMessage[] = journal.slice(-6).map(n => ({
-        role: n.author === 'ai' ? 'model' : 'user',
-        content: n.text,
-      }));
+      // Only feed UNRESOLVED notes into AI context — resolved items are done business
+      const history: ChatMessage[] = journal
+        .filter(n => !n.resolved)
+        .slice(-6)
+        .map(n => ({
+          role: n.author === 'ai' ? 'model' : 'user',
+          content: n.text,
+        }));
       const ctx = buildJournalContext(data, userEdits);
       const reply = await geminiChat(question, history, undefined, ctx);
       post(reply, 'ai');
@@ -133,17 +142,31 @@ export function NotesForClaude({ userEdits, backendAvailable, data, onJournalCha
           <div className="flex items-center gap-3">
             <FileText className="w-4 h-4 text-brand-blue" />
             <h2 className="font-black text-brand-blue uppercase tracking-widest text-xs">Journal</h2>
-            <span className="text-[10px] font-bold text-slate-400">{journal.length} entries</span>
+            <span className="text-[10px] font-bold text-slate-400">
+              {openCount} open{resolvedCount > 0 && ` · ${resolvedCount} resolved`}
+            </span>
           </div>
-          {journal.length > 0 && (
-            <button
-              onClick={clearAll}
-              className="p-1.5 text-slate-400 hover:text-red-600 transition-colors"
-              title="Clear all"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          )}
+          <div className="flex items-center gap-1">
+            {resolvedCount > 0 && (
+              <button
+                onClick={() => setShowResolved(v => !v)}
+                className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500 hover:text-brand-blue transition-colors"
+                title={showResolved ? 'Hide resolved' : 'Show resolved'}
+              >
+                {showResolved ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                {showResolved ? 'Hide resolved' : 'Show resolved'}
+              </button>
+            )}
+            {journal.length > 0 && (
+              <button
+                onClick={clearAll}
+                className="p-1.5 text-slate-400 hover:text-red-600 transition-colors"
+                title="Clear all"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="divide-y divide-slate-50 max-h-[55vh] overflow-y-auto">
@@ -153,7 +176,12 @@ export function NotesForClaude({ userEdits, backendAvailable, data, onJournalCha
                 No notes yet — write something below to get started
               </div>
             )}
-            {journal.map((entry) => {
+            {journal.length > 0 && visibleJournal.length === 0 && (
+              <div className="px-6 py-12 text-center text-slate-400 text-xs font-bold uppercase tracking-widest">
+                All {resolvedCount} note{resolvedCount === 1 ? '' : 's'} resolved — toggle "Show resolved" above to view
+              </div>
+            )}
+            {visibleJournal.map((entry) => {
               const isAI = entry.author === 'ai';
               const isField = entry.author === 'field';
               return (

@@ -7,8 +7,12 @@
 
 import { GoogleGenAI } from '@google/genai';
 
-// Backend URL — set VITE_API_URL in .env for production (Render URL)
-export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+// Backend URL.
+// - Production: defaults to same-origin so requests go to Netlify Functions on this site.
+// - Development: defaults to localhost:3000 for local function dev.
+// - Override either with VITE_API_URL if you point at a different backend.
+const _ENV_API_URL = import.meta.env.VITE_API_URL as string | undefined;
+export const API_BASE = _ENV_API_URL || (import.meta.env.PROD ? '' : 'http://localhost:3000');
 const API_KEY = import.meta.env.VITE_API_KEY || 'tas-hub-local-key-2026';
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
 
@@ -291,5 +295,67 @@ export async function getProjects(): Promise<unknown[]> {
     return projects || [];
   } catch {
     return [];
+  }
+}
+
+// ─── Field Submissions ───────────────────────────────────────────────────────
+
+export type FieldSubmissionStatus = 'pending' | 'attached' | 'discarded';
+
+export interface FieldSubmission {
+  id: string;
+  submittedAt: string;
+  submittedBy: string;
+  status: FieldSubmissionStatus;
+  projectName?: string;
+  siteAddress: string;
+  gps?: { lat: number; lng: number };
+  testPits?: unknown[];
+  observations?: string;
+  aiSummary?: string;
+  photoCount?: number;
+  rawData?: Record<string, unknown>;
+}
+
+export async function submitFieldData(payload: Omit<FieldSubmission, 'id' | 'submittedAt' | 'status'>): Promise<FieldSubmission | null> {
+  try {
+    const { submission } = await apiFetch('/api/field-submissions', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    return submission;
+  } catch {
+    return null;
+  }
+}
+
+export async function listFieldSubmissions(status?: FieldSubmissionStatus): Promise<FieldSubmission[]> {
+  try {
+    const qs = status ? `?status=${status}` : '';
+    const { submissions } = await apiFetch(`/api/field-submissions${qs}`);
+    return submissions || [];
+  } catch {
+    return [];
+  }
+}
+
+export async function updateFieldSubmission(id: string, patch: Partial<FieldSubmission>): Promise<FieldSubmission | null> {
+  try {
+    const { submission } = await apiFetch(`/api/field-submissions?id=${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    });
+    return submission;
+  } catch {
+    return null;
+  }
+}
+
+export async function deleteFieldSubmission(id: string): Promise<boolean> {
+  try {
+    await apiFetch(`/api/field-submissions?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    return true;
+  } catch {
+    return false;
   }
 }

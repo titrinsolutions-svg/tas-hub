@@ -5,7 +5,37 @@
 [build.environment]
   NODE_VERSION = "22"
 
-# SPA routing — serve index.html for all paths
+# ── API routes → Netlify Functions ──────────────────────────────────────────
+# These MUST come before the SPA catch-all below.
+
+[[redirects]]
+  from = "/api/hub"
+  to = "/.netlify/functions/hub"
+  status = 200
+
+[[redirects]]
+  from = "/api/hub/notes"
+  to = "/.netlify/functions/hub-notes"
+  status = 200
+
+[[redirects]]
+  from = "/api/field-submissions"
+  to = "/.netlify/functions/field-submissions"
+  status = 200
+
+[[redirects]]
+  from = "/health"
+  to = "/.netlify/functions/health"
+  status = 200
+
+[[redirects]]
+  from = "/auth/status"
+  to = "/.netlify/functions/auth-status"
+  status = 200
+
+# ── SPA routing fallback ────────────────────────────────────────────────────
+# Serves index.html for everything not matched above.
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

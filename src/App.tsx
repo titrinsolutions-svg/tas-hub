@@ -7,6 +7,7 @@ import { Projects } from './components/Projects';
 import { Invoices } from './components/Invoices';
 import { NotesForClaude } from './components/NotesForClaude';
 import { FieldForm } from './components/FieldForm';
+import { FieldSubmissions } from './components/FieldSubmissions';
 import { EmailTemplates } from './components/EmailTemplates';
 import { QuickUpdate } from './components/QuickUpdate';
 import { GeminiChat } from './components/GeminiChat';
@@ -160,21 +161,45 @@ export default function App() {
       )}
 
       {activeTab === 'projects' && (
-        <Projects
-          data={data}
-          userEdits={userEdits}
-          isEditMode={isEditMode}
-          onAddProject={() => setModalConfig({
-            isOpen: true, title: 'Add Project', type: 'project', isCustom: true,
-            data: { name: '', client: '', status: 'active', badge: 'fp', badgeLabel: 'Farm Plan', note: '', action: '', actionType: 'normal' }
-          })}
-          onEditProject={(i, isCustom) => setModalConfig({
-            isOpen: true, title: 'Edit Project', type: 'project', isCustom, index: i, data: data.projects[i]
-          })}
-          onDeleteProject={(name) =>
-            setUserEdits({ ...userEdits, deletedProjects: [...userEdits.deletedProjects, name] })
-          }
-        />
+        <>
+          {isAdmin && (
+            <FieldSubmissions
+              data={data}
+              userEdits={userEdits}
+              backendAvailable={backendAvailable}
+              onAttachToProject={(projectName, summary) => {
+                const existing = userEdits.projectOverrides[projectName] || {};
+                const project = data.projects.find(p => p.name === projectName);
+                const existingNote = (existing.note ?? project?.note) ?? '';
+                const merged = existingNote
+                  ? `${existingNote}\n\n${summary}`
+                  : summary;
+                setUserEdits({
+                  ...userEdits,
+                  projectOverrides: {
+                    ...userEdits.projectOverrides,
+                    [projectName]: { ...existing, note: merged },
+                  },
+                });
+              }}
+            />
+          )}
+          <Projects
+            data={data}
+            userEdits={userEdits}
+            isEditMode={isEditMode}
+            onAddProject={() => setModalConfig({
+              isOpen: true, title: 'Add Project', type: 'project', isCustom: true,
+              data: { name: '', client: '', status: 'active', badge: 'fp', badgeLabel: 'Farm Plan', note: '', action: '', actionType: 'normal' }
+            })}
+            onEditProject={(i, isCustom) => setModalConfig({
+              isOpen: true, title: 'Edit Project', type: 'project', isCustom, index: i, data: data.projects[i]
+            })}
+            onDeleteProject={(name) =>
+              setUserEdits({ ...userEdits, deletedProjects: [...userEdits.deletedProjects, name] })
+            }
+          />
+        </>
       )}
 
       {activeTab === 'invoices' && isAdmin && (

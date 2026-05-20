@@ -35,6 +35,7 @@ import {
   LOGOS
 } from '../constants';
 import { GoogleGenAI, Type } from "@google/genai";
+import { submitFieldData } from '../lib/api';
 
 interface PhotoData {
   id: string;
@@ -152,6 +153,8 @@ export function FieldForm({ role = 'field' }: FieldFormProps) {
   const [isAnalyzing, setIsAnalyzing] = useState<string | null>(null);
   const [showLCAGuide, setShowLCAGuide] = useState(false);
   const [activePitId, setActivePitId] = useState<string | null>(null);
+  const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const downloadWatermarkedPhoto = async (photo: PhotoData, customLabel?: string, notes?: string) => {
     const canvas = document.createElement('canvas');
@@ -520,6 +523,66 @@ SIGNATURE: ${signature ? 'Captured' : 'Pending'}
     alert('Notes copied to clipboard for Claude!');
   };
 
+  const submitToAdmin = async () => {
+    if (!session.address) {
+      setSubmitError('Site address is required');
+      setSubmitState('error');
+      return;
+    }
+    setSubmitState('submitting');
+    setSubmitError(null);
+
+    const observationsText = [
+      `Drainage: ${observations.drainage}`,
+      `Smell: ${observations.smell}`,
+      `Setbacks: ${observations.setbacks}`,
+      observations.ownerInput && `Owner input: ${observations.ownerInput}`,
+      observations.issues && `Issues: ${observations.issues}`,
+      observations.generalNotes && `Notes: ${observations.generalNotes}`,
+    ].filter(Boolean).join('\n');
+
+    const firstGps = photos.find(p => p.gps)?.gps;
+
+    const submission = await submitFieldData({
+      submittedBy: role,
+      siteAddress: session.address,
+      projectName: session.fileNumber || undefined,
+      gps: firstGps,
+      testPits: testPits.map(p => ({
+        depth: p.depth,
+        texture: p.texture,
+        moisture: p.moisture,
+        munsell: p.munsell,
+        lcaClass: p.lcaClass,
+        lcaSubclass: p.lcaSubclass,
+        notes: p.notes,
+      })),
+      observations: observationsText,
+      photoCount: photos.length,
+      rawData: {
+        session,
+        photoLabels: photos.map(p => ({
+          label: p.label,
+          gps: p.gps,
+          lcaClass: p.lcaClass,
+          munsell: p.aiAnalysis?.munsell,
+          texture: p.aiAnalysis?.texture,
+          elevation: p.elevation,
+          topography: p.topography,
+        })),
+        signaturePresent: Boolean(signature),
+      },
+    });
+
+    if (submission) {
+      setSubmitState('success');
+      setTimeout(() => setSubmitState('idle'), 4000);
+    } else {
+      setSubmitError('Could not reach the server. Your draft is still saved locally — try again later.');
+      setSubmitState('error');
+    }
+  };
+
   const clearForm = () => {
     if (window.confirm('Clear all field data?')) {
       setPhotos([]);
@@ -550,21 +613,53 @@ SIGNATURE: ${signature ? 'Captured' : 'Pending'}
             </p>
           )}
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => { clearForm(); clearDraft(); }}
-            className="flex items-center gap-2 px-4 py-2 text-slate-500 hover:text-red-600 font-bold text-sm transition-colors"
-          >
-            <RotateCcw className="w-4 h-4" />
-            Reset
-          </button>
-          <button
-            onClick={generateNotesCard}
-            className="flex items-center gap-2 px-6 py-2 bg-brand-blue text-white rounded-xl font-bold shadow-lg shadow-brand-blue/20 hover:scale-105 transition-transform"
-          >
-            <Save className="w-4 h-4" />
-            Finalize & Copy
-          </button>
+        <div className="flex flex-col items-end gap-2">
+          <div className="flex gap-2">
+            <button
+              onClick={() => { clearForm(); clearDraft(); }}
+              className="flex items-center gap-2 px-4 py-2 text-slate-500 hover:text-red-600 font-bold text-sm transition-colors"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Reset
+            </button>
+            <button
+              onClick={generateNotesCard}
+              className="flex items-center gap-2 px-5 py-2 bg-slate-100 text-slate-700 rounded-xl font-bold text-sm hover:bg-slate-200 transition-colors"
+              title="Copy a text summary to clipboard (does NOT submit to admin)"
+            >
+              <FileText className="w-4 h-4" />
+              Copy for Claude
+            </button>
+            <button
+              onClick={submitToAdmin}
+              disabled={submitState === 'submitting'}
+              className={cn(
+                "flex items-center gap-2 px-6 py-2 text-white rounded-xl font-bold shadow-lg transition-all",
+                submitState === 'success'
+                  ? "bg-brand-green shadow-brand-green/20"
+                  : submitState === 'error'
+                  ? "bg-red-600 shadow-red-600/20"
+                  : "bg-brand-blue shadow-brand-blue/20 hover:scale-105",
+                submitState === 'submitting' && "opacity-70 cursor-wait"
+              )}
+            >
+              {submitState === 'submitting' ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Submitting…</>
+              ) : submitState === 'success' ? (
+                <><CheckCircle2 className="w-4 h-4" /> Submitted to admin</>
+              ) : submitState === 'error' ? (
+                <><AlertCircle className="w-4 h-4" /> Try again</>
+              ) : (
+                <><Save className="w-4 h-4" /> Submit to admin</>
+              )}
+            </button>
+          </div>
+          {submitState === 'error' && submitError && (
+            <p className="text-xs text-red-600 font-medium max-w-xs text-right">{submitError}</p>
+          )}
+          {submitState === 'success' && (
+            <p className="text-xs text-brand-green font-medium">Tish will see this in the Projects view.</p>
+          )}
         </div>
       </div>
 
