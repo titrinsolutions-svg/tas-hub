@@ -111,6 +111,88 @@ export interface NoteEntry {
   resolved?: boolean;
 }
 
+// ── Field data collection (ALC P-10 raw evidence) ───────────────────────────
+// Captured on phone in TAS Hub. Deep analysis (horizon detection, SIFT lookup,
+// drainage class derivation, LCA classification) happens in Claude Cowork on
+// desktop with Opus from these raw inputs.
+
+export type DrainageClassObserved =
+  | 'Rapidly Drained'
+  | 'Well Drained'
+  | 'Moderately Well Drained'
+  | 'Imperfectly Drained'
+  | 'Poorly Drained'
+  | 'Very Poorly Drained';
+
+export type SlopeAspect = 'N' | 'NE' | 'E' | 'SE' | 'S' | 'SW' | 'W' | 'NW' | 'level';
+export type SlopeGradient = 'level' | 'gentle' | 'moderate' | 'strong' | 'steep';
+export type LandUseObserved =
+  | 'pasture'
+  | 'crop'
+  | 'fallow'
+  | 'orchard'
+  | 'developed'
+  | 'mixed'
+  | 'forested'
+  | 'other';
+export type VegetationObserved =
+  | 'grasses'
+  | 'shrubs'
+  | 'trees'
+  | 'mixed'
+  | 'cleared'
+  | 'crop'
+  | 'other';
+
+export interface PitObservation {
+  id: string;
+  pitNumber: number;                 // TP1, TP2, etc. — auto-assigned
+  excavatedAt: string;               // ISO timestamp
+  gps?: { lat: number; lng: number; accuracyM?: number };
+
+  // Raw measurements (tape measure + eyes)
+  pitBaseDepthCm?: number;           // where shovel stopped / refusal
+  waterTablePresent?: boolean;
+  waterTableDepthCm?: number;        // if present
+  rootingDepthCm?: number;           // deepest visible root
+
+  // Liability context
+  hoursSinceLastRain?: number;       // auto-flagged if low; Cowork uses for non-rainfall-period framing
+  rainfallNote?: string;             // free text, e.g. "atmospheric river two days ago"
+
+  // Evidence
+  profilePhotoId?: string;           // REQUIRED to submit — photo with tape measure
+  landscapePhotoId?: string;         // optional context shot
+  fieldNotes?: string;               // free-form, used sparingly
+
+  // Lightweight AI hints (from phone-side Gemini Flash, NOT authoritative)
+  aiQualityFlags?: string[];         // e.g. ["tape not visible", "image too dark"]
+  aiMunsellEstimate?: string;        // sanity check on-site
+  aiTextureEstimate?: string;
+}
+
+export interface SiteObservations {
+  // Tech-observed (only at the site)
+  currentLandUse?: LandUseObserved;
+  vegetation?: VegetationObserved;
+  slopeAspect?: SlopeAspect;         // phone compass auto-populates, manual override allowed
+  slopeGradient?: SlopeGradient;
+  pondingEvidence?: boolean;
+  pondingNote?: string;              // location, persistence
+
+  adjacentLandUse?: {
+    north?: string;
+    south?: string;
+    east?: string;
+    west?: string;
+  };
+
+  // Sizing (used for pit density check)
+  assessmentAreaHa?: number;         // hectares — for P-10 §3.1 density check
+
+  generalNotes?: string;
+}
+
 export interface UserEdits {
   lastManualEdit?: string;
   completedActions: (number | string)[];

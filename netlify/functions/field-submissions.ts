@@ -15,6 +15,12 @@ export interface FieldSubmission {
   projectName?: string;
   siteAddress: string;
   gps?: { lat: number; lng: number };
+
+  // Structured P-10 raw evidence (new schema)
+  pits?: unknown[];                 // PitObservation[] — kept as unknown here to avoid coupling
+  site?: unknown;                   // SiteObservations
+
+  // Legacy
   testPits?: unknown[];
   observations?: string;
   aiSummary?: string;
@@ -84,6 +90,10 @@ export default async function handler(req: Request, _ctx: Context): Promise<Resp
         siteAddress: body.siteAddress,
         projectName: body.projectName,
         gps: body.gps,
+        // Structured P-10 fields
+        pits: body.pits,
+        site: body.site,
+        // Legacy passthrough
         testPits: body.testPits,
         observations: body.observations,
         aiSummary: body.aiSummary,

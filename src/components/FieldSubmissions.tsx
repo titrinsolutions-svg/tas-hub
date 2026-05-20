@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { MapPin, Clock, Camera, CheckCircle2, X, Link2, Loader2, RefreshCw } from 'lucide-react';
+import { MapPin, Clock, Camera, CheckCircle2, X, Link2, Loader2, RefreshCw, Terminal, Layers, Droplets, AlertTriangle } from 'lucide-react';
 import { listFieldSubmissions, updateFieldSubmission, type FieldSubmission } from '../lib/api';
 import { AppData, Project, UserEdits } from '../types';
 import { cn } from '../lib/utils';
@@ -17,11 +17,34 @@ function summarizeSubmission(s: FieldSubmission): string {
     `📋 Field submission ${s.submittedAt.slice(0, 10)} by ${s.submittedBy}`,
     `Site: ${s.siteAddress}`,
     s.gps && `GPS: ${s.gps.lat.toFixed(5)}, ${s.gps.lng.toFixed(5)}`,
-    s.testPits && Array.isArray(s.testPits) && s.testPits.length > 0 && `Test pits: ${s.testPits.length}`,
+    s.pits?.length && `Test pits: ${s.pits.length}`,
+    !s.pits?.length && s.testPits && Array.isArray(s.testPits) && s.testPits.length > 0 && `Test pits: ${s.testPits.length}`,
     s.photoCount && `Photos: ${s.photoCount}`,
     s.observations,
   ].filter(Boolean);
   return lines.join('\n');
+}
+
+function buildCoworkPrompt(s: FieldSubmission): string {
+  const base = 'https://tas-hub-titrin.netlify.app/api/field-submissions';
+  return `Analyze TAS Hub field submission ${s.id}.
+
+Site: ${s.siteAddress}${s.projectName ? `\nProject: ${s.projectName}` : ''}
+Pull full submission: GET ${base}?id=${s.id}
+  (use the same x-api-key as the hub frontend; same Netlify Blobs back-end)
+
+Run the full LCA P-10 pipeline using Opus 4.7:
+1. Hydrate property context with property_research.py (PMBC, ALR, BC Soil Survey)
+2. SIFT manual lookup — confirm/revise the provincial soil mapping for the parcel coordinates
+3. Climate normals — nearest active Env Canada station, 1991-2020 normals
+4. Prior reports — search TAS Reference Library + Gmail for prior agrology reports on this PID/address
+5. Deep photo analysis (per pit profile photo) — horizon detection, Munsell, mottling first-depth, gleying depth, CF%, structure, consistence, rooting depth, drainage class derivation
+6. Cross-reference photo evidence with SIFT + prior reports (reconcile per report-lessons.md May 14)
+7. Build the soil-pit table + climate table + drainage register
+8. Draft the LCA report using tas-report-writer skill, ALC P-10 spec
+9. Flag any drainage prediction-verb violations before finalizing
+
+Stop and ask Tish before sealing.`;
 }
 
 export function FieldSubmissions({ data, userEdits, onAttachToProject, backendAvailable }: FieldSubmissionsProps) {
@@ -29,6 +52,7 @@ export function FieldSubmissions({ data, userEdits, onAttachToProject, backendAv
   const [loading, setLoading] = useState(false);
   const [attachingId, setAttachingId] = useState<string | null>(null);
   const [selectedProject, setSelectedProject] = useState<Record<string, string>>({});
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const refresh = async () => {
     if (!backendAvailable) return;
@@ -147,6 +171,67 @@ export function FieldSubmissions({ data, userEdits, onAttachToProject, backendAv
                 </div>
               </div>
 
+              {/* P-10 raw evidence summary (new structured fields) */}
+              {(s.pits || s.site) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3 text-xs">
+                  {s.pits && s.pits.length > 0 && (
+                    <div className="bg-amber-50/60 border border-amber-200/40 rounded-xl p-3">
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <Layers className="w-3 h-3 text-amber-700" />
+                        <span className="font-black text-amber-900 uppercase tracking-widest text-[10px]">Pit evidence ({s.pits.length})</span>
+                      </div>
+                      <ul className="space-y-1 text-slate-700">
+                        {s.pits.slice(0, 4).map((p: any, i: number) => (
+                          <li key={p.id ?? i} className="flex flex-wrap gap-x-3 gap-y-0.5">
+                            <span className="font-bold text-amber-900">TP{p.pitNumber ?? i + 1}</span>
+                            {p.pitBaseDepthCm != null && <span>base {p.pitBaseDepthCm}cm</span>}
+                            {p.waterTablePresent && (
+                              <span className="flex items-center gap-0.5 text-blue-700">
+                                <Droplets className="w-3 h-3" />
+                                {p.waterTableDepthCm != null ? `${p.waterTableDepthCm}cm` : 'present'}
+                              </span>
+                            )}
+                            {p.rootingDepthCm != null && <span>roots {p.rootingDepthCm}cm</span>}
+                            {p.hoursSinceLastRain != null && p.hoursSinceLastRain < 72 && (
+                              <span className="flex items-center gap-0.5 text-red-600">
+                                <AlertTriangle className="w-3 h-3" />
+                                rain {p.hoursSinceLastRain}h ago
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                        {s.pits.length > 4 && (
+                          <li className="text-slate-400 italic">…{s.pits.length - 4} more pit{s.pits.length - 4 === 1 ? '' : 's'}</li>
+                        )}
+                      </ul>
+                    </div>
+                  )}
+
+                  {s.site && (() => {
+                    const site: any = s.site;
+                    const bits = [
+                      site.assessmentAreaHa && `Area ${site.assessmentAreaHa} ha`,
+                      site.currentLandUse && `Use: ${site.currentLandUse}`,
+                      site.vegetation && `Veg: ${site.vegetation}`,
+                      site.slopeAspect && site.slopeGradient && `Slope ${site.slopeGradient} → ${site.slopeAspect}`,
+                      site.pondingEvidence && '⚠ ponding',
+                    ].filter(Boolean);
+                    if (bits.length === 0) return null;
+                    return (
+                      <div className="bg-slate-50 border border-slate-100 rounded-xl p-3">
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <MapPin className="w-3 h-3 text-slate-600" />
+                          <span className="font-black text-slate-700 uppercase tracking-widest text-[10px]">Site context</span>
+                        </div>
+                        <ul className="space-y-0.5 text-slate-700">
+                          {bits.map((b, i) => <li key={i}>{b}</li>)}
+                        </ul>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
               {s.observations && (
                 <p className="text-sm text-slate-700 mb-3 whitespace-pre-line bg-slate-50 rounded-xl p-3 leading-relaxed">
                   {s.observations}
@@ -180,6 +265,34 @@ export function FieldSubmissions({ data, userEdits, onAttachToProject, backendAv
                     <Link2 className="w-3.5 h-3.5" />
                   )}
                   Attach
+                </button>
+                <button
+                  onClick={async () => {
+                    const prompt = buildCoworkPrompt(s);
+                    try {
+                      await navigator.clipboard.writeText(prompt);
+                      setCopiedId(s.id);
+                      setTimeout(() => setCopiedId(null), 2500);
+                    } catch {
+                      // Older browser fallback
+                      const ta = document.createElement('textarea');
+                      ta.value = prompt;
+                      document.body.appendChild(ta);
+                      ta.select();
+                      document.execCommand('copy');
+                      document.body.removeChild(ta);
+                      setCopiedId(s.id);
+                      setTimeout(() => setCopiedId(null), 2500);
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-bold transition-colors"
+                  title="Copy a prompt to paste into Claude Cowork on desktop"
+                >
+                  {copiedId === s.id ? (
+                    <><CheckCircle2 className="w-3.5 h-3.5" /> Copied</>
+                  ) : (
+                    <><Terminal className="w-3.5 h-3.5" /> Send to Cowork</>
+                  )}
                 </button>
                 <button
                   onClick={() => handleDiscard(s)}

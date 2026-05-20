@@ -302,6 +302,8 @@ export async function getProjects(): Promise<unknown[]> {
 
 export type FieldSubmissionStatus = 'pending' | 'attached' | 'discarded';
 
+import type { PitObservation, SiteObservations } from '../types';
+
 export interface FieldSubmission {
   id: string;
   submittedAt: string;
@@ -310,6 +312,12 @@ export interface FieldSubmission {
   projectName?: string;
   siteAddress: string;
   gps?: { lat: number; lng: number };
+
+  // Structured P-10 raw evidence
+  pits?: PitObservation[];
+  site?: SiteObservations;
+
+  // Legacy fields (kept for backward compat with earlier submissions)
   testPits?: unknown[];
   observations?: string;
   aiSummary?: string;

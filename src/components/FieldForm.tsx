@@ -74,6 +74,31 @@ interface TestPit {
   lcaSubclass?: string;
   notes: string;
   photo?: PhotoData;
+
+  // ── P-10 raw evidence (new) ────────────────────────────────────────────
+  pitBaseDepthCm?: number;       // tape-measured pit base (refusal / C horizon)
+  waterTablePresent?: boolean;   // free water encountered?
+  waterTableDepthCm?: number;    // if present
+  rootingDepthCm?: number;       // deepest visible root
+  // Liability framing — captured at site, used by Cowork to write the report
+  hoursSinceLastRain?: number;
+  rainfallNote?: string;
+}
+
+// Site-level P-10 inputs. Tech-observable only (not photo-derivable later).
+interface SiteInfo {
+  currentLandUse: '' | 'pasture' | 'crop' | 'fallow' | 'orchard' | 'developed' | 'mixed' | 'forested' | 'other';
+  vegetation: '' | 'grasses' | 'shrubs' | 'trees' | 'mixed' | 'cleared' | 'crop' | 'other';
+  slopeAspect: '' | 'N' | 'NE' | 'E' | 'SE' | 'S' | 'SW' | 'W' | 'NW' | 'level';
+  slopeGradient: '' | 'level' | 'gentle' | 'moderate' | 'strong' | 'steep';
+  pondingEvidence: boolean;
+  pondingNote: string;
+  adjacentN: string;
+  adjacentS: string;
+  adjacentE: string;
+  adjacentW: string;
+  assessmentAreaHa: string;  // string for input ergonomics; parsed to number on submit
+  generalNotes: string;
 }
 
 const FIELD_DRAFT_KEY = 'tas_field_draft';
@@ -113,6 +138,20 @@ export function FieldForm({ role = 'field', projects = [] }: FieldFormProps) {
     issues: '',
     generalNotes: ''
   });
+  const [siteInfo, setSiteInfo] = useState<SiteInfo>(draft?.siteInfo || {
+    currentLandUse: '',
+    vegetation: '',
+    slopeAspect: '',
+    slopeGradient: '',
+    pondingEvidence: false,
+    pondingNote: '',
+    adjacentN: '',
+    adjacentS: '',
+    adjacentE: '',
+    adjacentW: '',
+    assessmentAreaHa: '',
+    generalNotes: '',
+  });
   const [draftSavedAt, setDraftSavedAt] = useState<string | null>(draft?.savedAt || null);
 
   const saveDraft = (updates: { session?: typeof session; testPits?: typeof testPits; observations?: typeof observations }) => {
@@ -131,18 +170,60 @@ export function FieldForm({ role = 'field', projects = [] }: FieldFormProps) {
     setDraftSavedAt(null);
   };
 
-  // Auto-save session, testPits, observations to localStorage whenever they change.
+  // Auto-save session, testPits, observations, siteInfo to localStorage whenever they change.
   // Photos are excluded (can be large base64 strings).
   useEffect(() => {
     const payload = {
       session,
       testPits: testPits.map(p => ({ ...p, photo: undefined })), // exclude photo blobs
       observations,
+      siteInfo,
       savedAt: new Date().toISOString(),
     };
     localStorage.setItem(FIELD_DRAFT_KEY, JSON.stringify(payload));
     setDraftSavedAt(payload.savedAt);
-  }, [session, testPits, observations]);
+  }, [session, testPits, observations, siteInfo]);
+
+  // ── Phone compass: auto-detect slope aspect if available ──────────────────
+  useEffect(() => {
+    if (siteInfo.slopeAspect) return; // don't overwrite manual selection
+    const handler = (e: any) => {
+      const heading = e.webkitCompassHeading ?? (e.alpha != null ? 360 - e.alpha : null);
+      if (heading == null) return;
+      const dirs: SiteInfo['slopeAspect'][] = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+      const idx = Math.round(heading / 45) % 8;
+      setSiteInfo(prev => prev.slopeAspect ? prev : { ...prev, slopeAspect: dirs[idx] });
+      window.removeEventListener('deviceorientation', handler);
+    };
+    window.addEventListener('deviceorientation', handler);
+    return () => window.removeEventListener('deviceorientation', handler);
+  }, []);
+
+  // ── Pit density calculation (P-10 §3.1 requires ≥1 pit per 1-5 ha) ───────
+  const pitDensityWarning = (() => {
+    const areaHa = parseFloat(siteInfo.assessmentAreaHa);
+    if (!areaHa || areaHa <= 0 || testPits.length === 0) return null;
+    const haPerPit = areaHa / testPits.length;
+    if (haPerPit > 5) {
+      return {
+        level: 'error' as const,
+        message: `${testPits.length} pit${testPits.length === 1 ? '' : 's'} on ${areaHa} ha = 1 per ${haPerPit.toFixed(1)} ha — BELOW P-10 minimum of 1 per 5 ha. Add more pits or justify in report.`,
+      };
+    }
+    if (haPerPit > 1) {
+      return {
+        level: 'ok' as const,
+        message: `${testPits.length} pit${testPits.length === 1 ? '' : 's'} on ${areaHa} ha = 1 per ${haPerPit.toFixed(1)} ha ✓ within P-10 (1 per 1-5 ha)`,
+      };
+    }
+    return {
+      level: 'ok' as const,
+      message: `${testPits.length} pit${testPits.length === 1 ? '' : 's'} on ${areaHa} ha = 1 per ${haPerPit.toFixed(2)} ha ✓ exceeds P-10 minimum density`,
+    };
+  })();
+
+  // Profile photo per pit is required for submit (per report-lessons May 14)
+  const pitsWithoutPhotos = testPits.filter(p => !p.photo);
 
   const [isCapturing, setIsCapturing] = useState(false);
   const [gpsStatus, setGpsStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -532,6 +613,16 @@ SIGNATURE: ${signature ? 'Captured' : 'Pending'}
       setSubmitState('error');
       return;
     }
+    if (testPits.length === 0) {
+      setSubmitError('Add at least one test pit before submitting');
+      setSubmitState('error');
+      return;
+    }
+    if (pitsWithoutPhotos.length > 0) {
+      setSubmitError(`${pitsWithoutPhotos.length} test pit${pitsWithoutPhotos.length === 1 ? '' : 's'} missing a profile photo. Per ALC P-10, every pit needs a photo with a visible tape measure before submission.`);
+      setSubmitState('error');
+      return;
+    }
     setSubmitState('submitting');
     setSubmitError(null);
 
@@ -546,11 +637,50 @@ SIGNATURE: ${signature ? 'Captured' : 'Pending'}
 
     const firstGps = photos.find(p => p.gps)?.gps;
 
+    // ── Structured P-10 evidence (consumed by Claude Cowork desktop) ─────
+    const pitsPayload = testPits.map((p, i) => ({
+      id: p.id,
+      pitNumber: i + 1,
+      excavatedAt: p.photo?.timestamp ?? new Date().toISOString(),
+      gps: p.photo?.gps,
+      pitBaseDepthCm: p.pitBaseDepthCm,
+      waterTablePresent: p.waterTablePresent,
+      waterTableDepthCm: p.waterTableDepthCm,
+      rootingDepthCm: p.rootingDepthCm,
+      hoursSinceLastRain: p.hoursSinceLastRain,
+      rainfallNote: p.rainfallNote,
+      profilePhotoId: p.photo?.id,
+      fieldNotes: p.notes,
+      aiQualityFlags: undefined,
+      aiMunsellEstimate: p.photo?.aiAnalysis?.munsell,
+      aiTextureEstimate: p.photo?.aiAnalysis?.texture,
+    }));
+
+    const sitePayload = {
+      currentLandUse: siteInfo.currentLandUse || undefined,
+      vegetation: siteInfo.vegetation || undefined,
+      slopeAspect: siteInfo.slopeAspect || undefined,
+      slopeGradient: siteInfo.slopeGradient || undefined,
+      pondingEvidence: siteInfo.pondingEvidence,
+      pondingNote: siteInfo.pondingNote || undefined,
+      adjacentLandUse: {
+        north: siteInfo.adjacentN || undefined,
+        south: siteInfo.adjacentS || undefined,
+        east: siteInfo.adjacentE || undefined,
+        west: siteInfo.adjacentW || undefined,
+      },
+      assessmentAreaHa: parseFloat(siteInfo.assessmentAreaHa) || undefined,
+      generalNotes: siteInfo.generalNotes || undefined,
+    };
+
     const submission = await submitFieldData({
       submittedBy: role,
       siteAddress: session.address,
       projectName: session.projectName || session.fileNumber || undefined,
       gps: firstGps,
+      pits: pitsPayload,
+      site: sitePayload,
+      // Legacy passthroughs (so existing admin renderer keeps working)
       testPits: testPits.map(p => ({
         depth: p.depth,
         texture: p.texture,
@@ -768,6 +898,166 @@ SIGNATURE: ${signature ? 'Captured' : 'Pending'}
                     </button>
                   ))}
                 </div>
+              </div>
+            </div>
+          </section>
+
+          {/* P-10 Site Info — raw evidence Cowork desktop uses to write the LCA report */}
+          <section className="bg-white rounded-3xl p-6 shadow-sm border border-amber-200/60">
+            <div className="flex items-center gap-3 mb-1">
+              <div className="p-2 bg-amber-50 rounded-xl text-amber-700">
+                <Info className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-brand-blue">ALC P-10 Site Info</h2>
+                <p className="text-[11px] font-medium text-slate-500">Raw site observations. Deep analysis happens in Claude Cowork at home.</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Assessment Area (ha)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={siteInfo.assessmentAreaHa}
+                  onChange={e => setSiteInfo({ ...siteInfo, assessmentAreaHa: e.target.value })}
+                  className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-brand-green"
+                  placeholder="e.g. 2.5"
+                />
+                {pitDensityWarning && (
+                  <p className={cn(
+                    "text-[10px] font-bold mt-1",
+                    pitDensityWarning.level === 'error' ? "text-red-600" : "text-brand-green"
+                  )}>
+                    {pitDensityWarning.message}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Current Land Use</label>
+                <select
+                  value={siteInfo.currentLandUse}
+                  onChange={e => setSiteInfo({ ...siteInfo, currentLandUse: e.target.value as SiteInfo['currentLandUse'] })}
+                  className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-brand-green"
+                >
+                  <option value="">— Pick —</option>
+                  <option value="pasture">Pasture</option>
+                  <option value="crop">Crop</option>
+                  <option value="fallow">Fallow</option>
+                  <option value="orchard">Orchard / Berries</option>
+                  <option value="developed">Developed</option>
+                  <option value="mixed">Mixed</option>
+                  <option value="forested">Forested</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Vegetation</label>
+                <select
+                  value={siteInfo.vegetation}
+                  onChange={e => setSiteInfo({ ...siteInfo, vegetation: e.target.value as SiteInfo['vegetation'] })}
+                  className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-brand-green"
+                >
+                  <option value="">— Pick —</option>
+                  <option value="grasses">Grasses</option>
+                  <option value="shrubs">Shrubs</option>
+                  <option value="trees">Trees</option>
+                  <option value="mixed">Mixed</option>
+                  <option value="cleared">Cleared</option>
+                  <option value="crop">Active crop</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Slope Aspect</label>
+                <select
+                  value={siteInfo.slopeAspect}
+                  onChange={e => setSiteInfo({ ...siteInfo, slopeAspect: e.target.value as SiteInfo['slopeAspect'] })}
+                  className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-brand-green"
+                >
+                  <option value="">— Auto-detected when on site —</option>
+                  <option value="level">Level (no aspect)</option>
+                  <option value="N">N</option>
+                  <option value="NE">NE</option>
+                  <option value="E">E</option>
+                  <option value="SE">SE</option>
+                  <option value="S">S</option>
+                  <option value="SW">SW</option>
+                  <option value="W">W</option>
+                  <option value="NW">NW</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Slope Gradient</label>
+                <select
+                  value={siteInfo.slopeGradient}
+                  onChange={e => setSiteInfo({ ...siteInfo, slopeGradient: e.target.value as SiteInfo['slopeGradient'] })}
+                  className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-brand-green"
+                >
+                  <option value="">— Pick —</option>
+                  <option value="level">Level (&lt;1%)</option>
+                  <option value="gentle">Gentle (1-5%)</option>
+                  <option value="moderate">Moderate (5-15%)</option>
+                  <option value="strong">Strong (15-30%)</option>
+                  <option value="steep">Steep (&gt;30%)</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5 md:col-span-2">
+                <label className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">
+                  <input
+                    type="checkbox"
+                    checked={siteInfo.pondingEvidence}
+                    onChange={e => setSiteInfo({ ...siteInfo, pondingEvidence: e.target.checked })}
+                    className="w-4 h-4 accent-brand-blue"
+                  />
+                  Evidence of ponding / surface drainage issues
+                </label>
+                {siteInfo.pondingEvidence && (
+                  <input
+                    type="text"
+                    value={siteInfo.pondingNote}
+                    onChange={e => setSiteInfo({ ...siteInfo, pondingNote: e.target.value })}
+                    placeholder="Where? Persistent or seasonal?"
+                    className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-brand-green"
+                  />
+                )}
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1 block mb-2">Adjacent Land Use (4 directions)</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(['N', 'S', 'E', 'W'] as const).map(d => {
+                    const key = (`adjacent${d}`) as 'adjacentN' | 'adjacentS' | 'adjacentE' | 'adjacentW';
+                    return (
+                      <div key={d} className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2">
+                        <span className="text-[10px] font-black text-brand-blue uppercase w-6 text-center">{d}</span>
+                        <input
+                          type="text"
+                          value={siteInfo[key]}
+                          onChange={e => setSiteInfo({ ...siteInfo, [key]: e.target.value })}
+                          placeholder={`Land use to the ${d.toLowerCase()}`}
+                          className="flex-1 bg-transparent border-none text-sm focus:ring-0 focus:outline-none"
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="md:col-span-2 space-y-1.5">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Other site observations</label>
+                <textarea
+                  value={siteInfo.generalNotes}
+                  onChange={e => setSiteInfo({ ...siteInfo, generalNotes: e.target.value })}
+                  placeholder="Anything else Tish would want to know? Free text."
+                  className="w-full h-20 px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-brand-green resize-none"
+                />
               </div>
             </div>
           </section>
@@ -1109,13 +1399,88 @@ SIGNATURE: ${signature ? 'Captured' : 'Pending'}
                       </div>
                     </div>
 
+                    {/* P-10 Raw Evidence (Cowork desktop derives horizons, drainage class, mottles from the photo) */}
+                    <div className="md:col-span-3 p-4 bg-amber-50/40 rounded-2xl border border-amber-200/40 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Info className="w-3.5 h-3.5 text-amber-700" />
+                        <span className="text-[10px] font-black text-amber-900 uppercase tracking-widest">P-10 Raw Evidence</span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Pit Base Depth (cm)</label>
+                          <input
+                            type="number"
+                            value={pit.pitBaseDepthCm ?? ''}
+                            onChange={e => updateTestPit(pit.id, 'pitBaseDepthCm', e.target.value === '' ? undefined : Number(e.target.value))}
+                            className="w-full px-3 py-2 bg-white border border-slate-100 rounded-lg text-sm"
+                            placeholder="e.g. 90"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Rooting Depth (cm)</label>
+                          <input
+                            type="number"
+                            value={pit.rootingDepthCm ?? ''}
+                            onChange={e => updateTestPit(pit.id, 'rootingDepthCm', e.target.value === '' ? undefined : Number(e.target.value))}
+                            className="w-full px-3 py-2 bg-white border border-slate-100 rounded-lg text-sm"
+                            placeholder="deepest root"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                          <input
+                            type="checkbox"
+                            checked={!!pit.waterTablePresent}
+                            onChange={e => updateTestPit(pit.id, 'waterTablePresent', e.target.checked)}
+                            className="w-4 h-4 accent-brand-blue"
+                          />
+                          Free water encountered in pit
+                        </label>
+                        {pit.waterTablePresent && (
+                          <input
+                            type="number"
+                            value={pit.waterTableDepthCm ?? ''}
+                            onChange={e => updateTestPit(pit.id, 'waterTableDepthCm', e.target.value === '' ? undefined : Number(e.target.value))}
+                            className="w-full px-3 py-2 bg-white border border-slate-100 rounded-lg text-sm"
+                            placeholder="Water depth from surface (cm)"
+                          />
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 pt-1 border-t border-amber-200/40">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Hours since rain</label>
+                          <input
+                            type="number"
+                            value={pit.hoursSinceLastRain ?? ''}
+                            onChange={e => updateTestPit(pit.id, 'hoursSinceLastRain', e.target.value === '' ? undefined : Number(e.target.value))}
+                            className="w-full px-3 py-2 bg-white border border-slate-100 rounded-lg text-sm"
+                            placeholder="for liability framing"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Rainfall note</label>
+                          <input
+                            type="text"
+                            value={pit.rainfallNote ?? ''}
+                            onChange={e => updateTestPit(pit.id, 'rainfallNote', e.target.value)}
+                            className="w-full px-3 py-2 bg-white border border-slate-100 rounded-lg text-sm"
+                            placeholder="e.g. heavy rain yesterday"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
                     <div className="md:col-span-3 space-y-1.5">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Notes / Mottling / Roots</label>
-                      <textarea 
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Notes / Anything Cowork should know</label>
+                      <textarea
                         value={pit.notes}
                         onChange={e => updateTestPit(pit.id, 'notes', e.target.value)}
                         className="w-full px-4 py-3 bg-white border border-slate-100 rounded-xl text-sm focus:ring-2 focus:ring-brand-green transition-all h-20 resize-none"
-                        placeholder="Describe soil structure, mottling, root depth, etc."
+                        placeholder="Anything unusual, drainage pattern observed, previous tile drains, etc."
                       />
                     </div>
 
