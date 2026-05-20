@@ -1064,14 +1064,14 @@ SIGNATURE: ${signature ? 'Captured' : 'Pending'}
 
           {/* Photo Documentation */}
           <section className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-brand-blue/5 rounded-xl text-brand-blue">
                   <ImageIcon className="w-5 h-5" />
                 </div>
-                <h2 className="text-lg font-bold text-brand-blue">Photo Documentation</h2>
+                <h2 className="text-lg font-bold text-brand-blue">Site Overview Photos</h2>
               </div>
-              <button 
+              <button
                 onClick={() => {
                   setIsCapturing(true);
                   fileInputRef.current?.click();
@@ -1087,14 +1087,22 @@ SIGNATURE: ${signature ? 'Captured' : 'Pending'}
                 onChange={handlePhotoUpload} 
                 accept="image/*" 
                 capture="environment"
-                className="hidden" 
+                className="hidden"
               />
+            </div>
+
+            {/* Tip for the field tech — encourages site overview shots */}
+            <div className="mb-4 p-3 bg-brand-blue/5 rounded-xl border border-brand-blue/10">
+              <p className="text-[11px] text-slate-600 leading-relaxed">
+                <span className="font-black text-brand-blue uppercase tracking-wider text-[10px]">Tip · Before digging:</span>{' '}
+                Take 2-3 overview shots showing the landscape + surrounding land. Then one shot per direction (N/S/E/W) if useful. Capture any visible drainage features (ditches, low spots, wet patches). Cowork uses these to ground-truth aerials and detect surface drainage Opus can't see from above.
+              </p>
             </div>
 
             {photos.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-slate-100 rounded-2xl bg-slate-50/50">
                 <ImageIcon className="w-12 h-12 text-slate-200 mb-3" />
-                <p className="text-slate-400 font-medium text-sm">No photos captured yet</p>
+                <p className="text-slate-400 font-medium text-sm">No site photos yet — take 2-3 to start</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
@@ -1566,19 +1574,6 @@ SIGNATURE: ${signature ? 'Captured' : 'Pending'}
                   className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-brand-green transition-all"
                   placeholder="e.g. None, peat, septic, sulfur"
                 />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Setbacks</label>
-                <select
-                  value={observations.setbacks}
-                  onChange={e => setObservations({...observations, setbacks: e.target.value})}
-                  className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-brand-green transition-all appearance-none"
-                >
-                  <option value="Compliant">Compliant</option>
-                  <option value="Non-Compliant">Non-Compliant</option>
-                  <option value="Variance Required">Variance Required</option>
-                </select>
               </div>
 
               <div className="space-y-1.5">
