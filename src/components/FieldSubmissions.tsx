@@ -35,6 +35,16 @@ export function FieldSubmissions({ data, userEdits, onAttachToProject, backendAv
     setLoading(true);
     const items = await listFieldSubmissions('pending');
     setSubmissions(items);
+    // Pre-fill the project dropdown when the field tech tagged a project at submission time
+    const presets: Record<string, string> = {};
+    for (const s of items) {
+      if (s.projectName && data.projects.some(p => p.name === s.projectName)) {
+        presets[s.id] = s.projectName;
+      }
+    }
+    if (Object.keys(presets).length > 0) {
+      setSelectedProject(prev => ({ ...presets, ...prev }));
+    }
     setLoading(false);
   };
 

@@ -11,7 +11,8 @@ import {
   ExternalLink,
   MapPin,
   Calendar,
-  ChevronRight
+  ChevronRight,
+  RotateCcw
 } from 'lucide-react';
 import { AppData, Project, UserEdits } from '../types';
 import { cn } from '../lib/utils';
@@ -23,6 +24,7 @@ interface ProjectsProps {
   onAddProject: () => void;
   onEditProject: (index: number, isCustom: boolean) => void;
   onDeleteProject: (name: string) => void;
+  onResetProject?: (name: string) => void;
 }
 
 export function Projects({
@@ -31,7 +33,8 @@ export function Projects({
   isEditMode,
   onAddProject,
   onEditProject,
-  onDeleteProject
+  onDeleteProject,
+  onResetProject
 }: ProjectsProps) {
   const badgeStyles: Record<string, string> = {
     fp: 'bg-brand-blue/10 text-brand-blue border-brand-blue/20',
@@ -116,12 +119,27 @@ export function Projects({
                       <button
                         onClick={() => onEditProject(i, isCustom)}
                         className="p-2.5 bg-white text-slate-400 hover:text-brand-blue border border-slate-100 rounded-xl transition-all shadow-sm"
+                        title="Edit project"
                       >
                         <Edit3 className="w-4 h-4" />
                       </button>
+                      {!isCustom && userEdits.projectOverrides[project.name] && onResetProject && (
+                        <button
+                          onClick={() => {
+                            if (confirm(`Reset "${project.name}" to its default? Your edits will be discarded.`)) {
+                              onResetProject(project.name);
+                            }
+                          }}
+                          className="p-2.5 bg-amber-50 text-amber-600 hover:text-amber-800 border border-amber-100 rounded-xl transition-all shadow-sm"
+                          title="Reset to default (discards your edits)"
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                        </button>
+                      )}
                       <button
                         onClick={() => onDeleteProject(project.name)}
                         className="p-2.5 bg-white text-slate-400 hover:text-red-600 border border-slate-100 rounded-xl transition-all shadow-sm"
+                        title="Delete project"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>

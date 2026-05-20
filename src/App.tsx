@@ -198,6 +198,10 @@ export default function App() {
             onDeleteProject={(name) =>
               setUserEdits({ ...userEdits, deletedProjects: [...userEdits.deletedProjects, name] })
             }
+            onResetProject={(name) => {
+              const { [name]: _removed, ...rest } = userEdits.projectOverrides;
+              setUserEdits({ ...userEdits, projectOverrides: rest });
+            }}
           />
         </>
       )}
@@ -232,7 +236,7 @@ export default function App() {
         />
       )}
 
-      {activeTab === 'field' && <FieldForm role={role} />}
+      {activeTab === 'field' && <FieldForm role={role} projects={data.projects} />}
 
       {activeTab === 'email' && isAdmin && <EmailTemplates data={data} />}
 

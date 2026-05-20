@@ -12,7 +12,6 @@ import {
   Receipt,
   ArrowUpRight,
   Filter,
-  Download,
   CreditCard
 } from 'lucide-react';
 import { AppData, Invoice, UserEdits } from '../types';
@@ -57,9 +56,6 @@ export function Invoices({
           <p className="text-slate-500 font-medium tracking-tight">Revenue tracking & invoice management</p>
         </div>
         <div className="flex items-center gap-3">
-          <button className="p-3 bg-white border border-slate-100 rounded-2xl text-slate-400 hover:text-brand-blue transition-all shadow-sm">
-            <Download className="w-5 h-5" />
-          </button>
           {isEditMode && (
             <button
               onClick={onAddInvoice}

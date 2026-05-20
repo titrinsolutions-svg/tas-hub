@@ -36,6 +36,7 @@ import {
 } from '../constants';
 import { GoogleGenAI, Type } from "@google/genai";
 import { submitFieldData } from '../lib/api';
+import type { Project } from '../types';
 
 interface PhotoData {
   id: string;
@@ -79,9 +80,10 @@ const FIELD_DRAFT_KEY = 'tas_field_draft';
 
 interface FieldFormProps {
   role?: 'admin' | 'field';
+  projects?: Project[];
 }
 
-export function FieldForm({ role = 'field' }: FieldFormProps) {
+export function FieldForm({ role = 'field', projects = [] }: FieldFormProps) {
   const loadDraft = () => {
     try {
       const saved = localStorage.getItem(FIELD_DRAFT_KEY);
@@ -97,7 +99,8 @@ export function FieldForm({ role = 'field' }: FieldFormProps) {
     reportType: 'Site Assessment',
     clientName: '',
     date: new Date().toISOString().split('T')[0],
-    weather: 'Sunny'
+    weather: 'Sunny',
+    projectName: '',
   });
 
   const [photos, setPhotos] = useState<PhotoData[]>(draft?.photos || []);
@@ -546,7 +549,7 @@ SIGNATURE: ${signature ? 'Captured' : 'Pending'}
     const submission = await submitFieldData({
       submittedBy: role,
       siteAddress: session.address,
-      projectName: session.fileNumber || undefined,
+      projectName: session.projectName || session.fileNumber || undefined,
       gps: firstGps,
       testPits: testPits.map(p => ({
         depth: p.depth,
@@ -676,10 +679,45 @@ SIGNATURE: ${signature ? 'Captured' : 'Pending'}
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {projects.length > 0 && (
+                <div className="md:col-span-2 space-y-1.5">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">
+                    Project (optional — pre-fills address + tags this submission)
+                  </label>
+                  <select
+                    value={session.projectName || ''}
+                    onChange={e => {
+                      const picked = e.target.value;
+                      const proj = projects.find(p => p.name === picked);
+                      // If user picks a project, auto-fill address from project name when our address is empty.
+                      // The project "name" field in this codebase is typically "<address> — TAS <num>" so we
+                      // extract the address chunk before " — " if present.
+                      const addressFromProject = proj
+                        ? (proj.name.split(' — ')[0] || proj.name)
+                        : '';
+                      const fileFromProject = proj
+                        ? (proj.name.match(/TAS\s*[\d.]+/i)?.[0] ?? '')
+                        : '';
+                      setSession({
+                        ...session,
+                        projectName: picked,
+                        address: session.address || addressFromProject,
+                        fileNumber: session.fileNumber || fileFromProject,
+                      });
+                    }}
+                    className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-brand-green transition-all font-medium"
+                  >
+                    <option value="">— No project linked —</option>
+                    {projects.map(p => (
+                      <option key={p.name} value={p.name}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Client Name</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={session.clientName}
                   onChange={e => setSession({...session, clientName: e.target.value})}
                   className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-brand-green transition-all"
@@ -688,8 +726,8 @@ SIGNATURE: ${signature ? 'Captured' : 'Pending'}
               </div>
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">File Number</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={session.fileNumber}
                   onChange={e => setSession({...session, fileNumber: e.target.value})}
                   className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-brand-green transition-all"
