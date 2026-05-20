@@ -43,7 +43,7 @@ interface PhotoData {
   id: string;
   url: string;
   timestamp: string;
-  gps?: { lat: number; lng: number };
+  gps?: { lat: number; lng: number; accuracyM?: number; altitudeM?: number; altitudeAccuracyM?: number };
   heading?: number;
   weather?: string;
   label: string;
@@ -196,7 +196,7 @@ export function FieldForm({ role = 'field', projects = [] }: FieldFormProps) {
 
   const [isCapturing, setIsCapturing] = useState(false);
   const [gpsStatus, setGpsStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-  const [currentGps, setCurrentGps] = useState<{ lat: number; lng: number } | null>(null);
+  const [currentGps, setCurrentGps] = useState<{ lat: number; lng: number; accuracyM?: number; altitudeM?: number; altitudeAccuracyM?: number } | null>(null);
   const [currentHeading, setCurrentHeading] = useState<number | null>(null);
   const [signature, setSignature] = useState<string | null>(null);
   const [showSoilGuide, setShowSoilGuide] = useState(false);
@@ -215,6 +215,61 @@ export function FieldForm({ role = 'field', projects = [] }: FieldFormProps) {
   const [geocode, setGeocode] = useState<GeocodeResult | null>(null);
   const [sunAtFirstPhoto, setSunAtFirstPhoto] = useState<SunPosition | null>(null);
   const [hydrated, setHydrated] = useState(false);
+
+  // ── Live compass HUD ──────────────────────────────────────────────────
+  // So the field tech sees their heading BEFORE snapping the photo and can
+  // orient deliberately ("face S 180° then take the overview").
+  const [liveHeading, setLiveHeading] = useState<number | null>(null);
+  type CompassPermState = 'unknown' | 'requesting' | 'granted' | 'denied' | 'unsupported';
+  const [compassPerm, setCompassPerm] = useState<CompassPermState>('unknown');
+
+  // On non-iOS (Android, desktop) deviceorientation typically just works.
+  // On iOS 13+, requires explicit user gesture to call requestPermission().
+  useEffect(() => {
+    const DOE = typeof window !== 'undefined' ? (window as any).DeviceOrientationEvent : undefined;
+    if (!DOE) {
+      setCompassPerm('unsupported');
+      return;
+    }
+    // If requestPermission exists (iOS), wait for user gesture.
+    if (typeof DOE.requestPermission === 'function') {
+      // Will be auto-granted if previously granted — but we still need a gesture
+      // to call requestPermission. Stay in 'unknown' until the user taps.
+      return;
+    }
+    // Android / desktop — attach immediately.
+    setCompassPerm('granted');
+  }, []);
+
+  useEffect(() => {
+    if (compassPerm !== 'granted') return;
+    const handler = (e: any) => {
+      const h = e.webkitCompassHeading ?? (e.alpha != null ? (360 - e.alpha) : null);
+      if (h != null && !Number.isNaN(h)) {
+        setLiveHeading(Math.round(h));
+      }
+    };
+    window.addEventListener('deviceorientation', handler);
+    return () => window.removeEventListener('deviceorientation', handler);
+  }, [compassPerm]);
+
+  const requestCompassPermission = async () => {
+    const DOE = (window as any).DeviceOrientationEvent;
+    if (DOE && typeof DOE.requestPermission === 'function') {
+      setCompassPerm('requesting');
+      try {
+        const result = await DOE.requestPermission();
+        setCompassPerm(result === 'granted' ? 'granted' : 'denied');
+      } catch {
+        setCompassPerm('denied');
+      }
+    } else {
+      setCompassPerm('granted');
+    }
+  };
+
+  const headingToDir = (h: number) =>
+    ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(h / 45) % 8];
 
   // Fires once when first GPS lock arrives. Reverse-geocode catches address
   // typos; sun angle is pure math used by Cowork to correct Munsell color
@@ -275,7 +330,11 @@ export function FieldForm({ role = 'field', projects = [] }: FieldFormProps) {
       ? ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(photo.heading / 45) % 8]
       : null;
     const gpsLine = photo.gps
-      ? `GPS: ${photo.gps.lat.toFixed(6)}, ${photo.gps.lng.toFixed(6)}`
+      ? (() => {
+          const acc = photo.gps.accuracyM != null ? ` ±${photo.gps.accuracyM}m` : '';
+          const alt = photo.gps.altitudeM != null ? ` | Alt: ${photo.gps.altitudeM}m ASL` : '';
+          return `GPS: ${photo.gps.lat.toFixed(6)}, ${photo.gps.lng.toFixed(6)}${acc}${alt}`;
+        })()
       : null;
     const pitMeasureBits = pit ? [
       pit.pitBaseDepthCm != null && `Base ${pit.pitBaseDepthCm}cm`,
@@ -299,6 +358,9 @@ export function FieldForm({ role = 'field', projects = [] }: FieldFormProps) {
     ].filter(Boolean);
     const subtitleText = subBits.join(' · ');
 
+    // Italic label line (e.g., "Site overview", "Test Pit 1") below data lines
+    const italicLabel = photo.label || null;
+
     // Compute footer height from how many lines we actually have
     const dataLines = [gpsLine, t, pitMeasureLine, contextLine].filter(Boolean) as string[];
     const footerH = Math.round(
@@ -306,6 +368,7 @@ export function FieldForm({ role = 'field', projects = [] }: FieldFormProps) {
       + fs * 1.5                                  // title row
       + lineGap                                   // subtitle row
       + lineGap * dataLines.length                // each data line
+      + (italicLabel ? lineGap * 0.85 : 0)        // italic label row
       + padX * 0.9                                // bottom padding
     );
 
@@ -364,11 +427,10 @@ export function FieldForm({ role = 'field', projects = [] }: FieldFormProps) {
     ctx.fillText(subtitleText, padX, y);
     y += lineGap;
 
-    // Data lines (smaller, lighter)
+    // Data lines (smaller, lighter, monospace)
     ctx.font = `${fs * 0.75}px ui-monospace, Menlo, monospace`;
     ctx.fillStyle = '#94a3b8';                    // slate-400
     for (const line of dataLines) {
-      // Trim to textRight if too long (shouldn't happen at these sizes but safety)
       const maxW = textRight - padX;
       let drawn = line;
       while (ctx.measureText(drawn).width > maxW && drawn.length > 8) {
@@ -376,6 +438,13 @@ export function FieldForm({ role = 'field', projects = [] }: FieldFormProps) {
       }
       ctx.fillText(drawn, padX, y);
       y += lineGap;
+    }
+
+    // Italic photo-label line at the very bottom
+    if (italicLabel) {
+      ctx.font = `italic ${fs * 0.7}px Inter, sans-serif`;
+      ctx.fillStyle = '#64748b';                  // slate-500 — even quieter
+      ctx.fillText(italicLabel, padX, y);
     }
 
     return canvas.toDataURL('image/jpeg', 0.92);
@@ -520,7 +589,13 @@ export function FieldForm({ role = 'field', projects = [] }: FieldFormProps) {
       setGpsStatus('loading');
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          setCurrentGps({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          setCurrentGps({
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            accuracyM: pos.coords.accuracy != null ? Math.round(pos.coords.accuracy) : undefined,
+            altitudeM: pos.coords.altitude != null ? Math.round(pos.coords.altitude) : undefined,
+            altitudeAccuracyM: pos.coords.altitudeAccuracy != null ? Math.round(pos.coords.altitudeAccuracy) : undefined,
+          });
           setGpsStatus('success');
         },
         () => setGpsStatus('error'),
@@ -882,6 +957,49 @@ SIGNATURE: ${signature ? 'Captured' : 'Pending'}
             <p className="text-xs text-brand-green font-medium">Tish will see this in the Projects view.</p>
           )}
         </div>
+      </div>
+
+      {/* Live compass HUD — face your direction, see your heading, then snap.
+          On iOS 13+ requires explicit gesture to enable. */}
+      <div className="flex items-center justify-center">
+        {compassPerm === 'granted' && liveHeading != null && (
+          <div className="inline-flex items-center gap-3 px-5 py-3 bg-brand-blue text-white rounded-2xl shadow-lg shadow-brand-blue/20">
+            <Compass className="w-5 h-5" />
+            <div className="flex items-baseline gap-2">
+              <span className="text-xs font-bold uppercase tracking-widest text-white/70">Facing</span>
+              <span className="text-2xl font-black tabular-nums">{headingToDir(liveHeading)}</span>
+              <span className="text-sm font-bold text-white/80 tabular-nums">{liveHeading}°</span>
+            </div>
+          </div>
+        )}
+        {compassPerm === 'granted' && liveHeading == null && (
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-500 rounded-2xl text-xs font-bold">
+            <Compass className="w-4 h-4" />
+            Compass ready — move phone to calibrate
+          </div>
+        )}
+        {(compassPerm === 'unknown' || compassPerm === 'requesting' || compassPerm === 'denied') && (
+          <button
+            onClick={requestCompassPermission}
+            disabled={compassPerm === 'requesting'}
+            className={cn(
+              "inline-flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-bold transition-colors",
+              compassPerm === 'denied'
+                ? "bg-amber-50 text-amber-700 border border-amber-200"
+                : "bg-brand-blue/10 text-brand-blue hover:bg-brand-blue/15"
+            )}
+          >
+            <Compass className="w-4 h-4" />
+            {compassPerm === 'requesting'
+              ? 'Requesting…'
+              : compassPerm === 'denied'
+              ? 'Compass disabled — tap to retry'
+              : 'Enable compass'}
+          </button>
+        )}
+        {compassPerm === 'unsupported' && (
+          <span className="text-[10px] text-slate-400 font-medium uppercase tracking-widest">Compass not supported on this device</span>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
