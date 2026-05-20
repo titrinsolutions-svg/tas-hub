@@ -3,6 +3,7 @@ import type { Context } from '@netlify/functions';
 import { checkApiKey, unauthorized, ok, methodNotAllowed, badRequest, serverError } from './_shared.js';
 
 const STORE_NAME = 'field-submissions';
+const INDEX_KEY = '_index.json';
 
 export type FieldSubmissionStatus = 'pending' | 'attached' | 'discarded';
 
@@ -21,6 +22,12 @@ export interface FieldSubmission {
   rawData?: Record<string, unknown>;
 }
 
+interface IndexEntry {
+  id: string;
+  status: FieldSubmissionStatus;
+  submittedAt: string;
+}
+
 function newId(): string {
   return `fs-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -29,11 +36,39 @@ function keyFor(id: string): string {
   return `${id}.json`;
 }
 
+// Index pattern: a single _index.json holds {entries: IndexEntry[]} so we get
+// strongly-consistent listing without relying on store.list() (which is eventually
+// consistent in Netlify Blobs).
+async function readIndex(store: ReturnType<typeof getStore>): Promise<IndexEntry[]> {
+  const data = (await store.get(INDEX_KEY, { type: 'json' })) as { entries: IndexEntry[] } | null;
+  return data?.entries ?? [];
+}
+
+async function writeIndex(store: ReturnType<typeof getStore>, entries: IndexEntry[]): Promise<void> {
+  await store.setJSON(INDEX_KEY, { entries });
+}
+
+async function upsertIndex(
+  store: ReturnType<typeof getStore>,
+  entry: IndexEntry
+): Promise<void> {
+  const entries = await readIndex(store);
+  const i = entries.findIndex(e => e.id === entry.id);
+  if (i >= 0) entries[i] = entry;
+  else entries.push(entry);
+  await writeIndex(store, entries);
+}
+
+async function removeFromIndex(store: ReturnType<typeof getStore>, id: string): Promise<void> {
+  const entries = await readIndex(store);
+  await writeIndex(store, entries.filter(e => e.id !== id));
+}
+
 export default async function handler(req: Request, _ctx: Context): Promise<Response> {
   if (!checkApiKey(req)) return unauthorized();
 
   try {
-    const store = getStore(STORE_NAME);
+    const store = getStore({ name: STORE_NAME, consistency: 'strong' });
     const url = new URL(req.url);
     const id = url.searchParams.get('id');
 
@@ -47,6 +82,7 @@ export default async function handler(req: Request, _ctx: Context): Promise<Resp
         submittedBy: body.submittedBy ?? 'field',
         status: 'pending',
         siteAddress: body.siteAddress,
+        projectName: body.projectName,
         gps: body.gps,
         testPits: body.testPits,
         observations: body.observations,
@@ -56,6 +92,11 @@ export default async function handler(req: Request, _ctx: Context): Promise<Resp
       };
 
       await store.setJSON(keyFor(submission.id), submission);
+      await upsertIndex(store, {
+        id: submission.id,
+        status: submission.status,
+        submittedAt: submission.submittedAt,
+      });
       return ok({ submission });
     }
 
@@ -67,15 +108,19 @@ export default async function handler(req: Request, _ctx: Context): Promise<Resp
 
     if (req.method === 'GET' && !id) {
       const statusFilter = url.searchParams.get('status') as FieldSubmissionStatus | null;
-      const { blobs } = await store.list();
+      const entries = await readIndex(store);
+      const filtered = statusFilter
+        ? entries.filter(e => e.status === statusFilter)
+        : entries;
+
+      // Sort newest first using the index timestamps (avoids fetching everyone)
+      filtered.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+
       const items: FieldSubmission[] = [];
-      for (const b of blobs) {
-        const sub = (await store.get(b.key, { type: 'json' })) as FieldSubmission | null;
-        if (sub && (!statusFilter || sub.status === statusFilter)) {
-          items.push(sub);
-        }
+      for (const e of filtered) {
+        const sub = (await store.get(keyFor(e.id), { type: 'json' })) as FieldSubmission | null;
+        if (sub) items.push(sub);
       }
-      items.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
       return ok({ submissions: items });
     }
 
@@ -85,11 +130,17 @@ export default async function handler(req: Request, _ctx: Context): Promise<Resp
       const patch = (await req.json()) as Partial<FieldSubmission>;
       const updated: FieldSubmission = { ...existing, ...patch, id: existing.id };
       await store.setJSON(keyFor(id), updated);
+      await upsertIndex(store, {
+        id: updated.id,
+        status: updated.status,
+        submittedAt: updated.submittedAt,
+      });
       return ok({ submission: updated });
     }
 
     if (req.method === 'DELETE' && id) {
       await store.delete(keyFor(id));
+      await removeFromIndex(store, id);
       return ok({ deleted: true });
     }
 
