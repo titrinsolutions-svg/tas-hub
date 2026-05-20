@@ -92,6 +92,7 @@ export function FieldSubmissions({ data, userEdits, onAttachToProject, backendAv
   const [attachingId, setAttachingId] = useState<string | null>(null);
   const [selectedProject, setSelectedProject] = useState<Record<string, string>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [confirmDiscard, setConfirmDiscard] = useState<FieldSubmission | null>(null);
 
   const refresh = async () => {
     if (!backendAvailable) return;
@@ -126,8 +127,14 @@ export function FieldSubmissions({ data, userEdits, onAttachToProject, backendAv
     setAttachingId(null);
   };
 
-  const handleDiscard = async (s: FieldSubmission) => {
-    if (!confirm(`Discard the field submission for ${s.siteAddress}? This cannot be undone.`)) return;
+  const handleDiscard = (s: FieldSubmission) => {
+    setConfirmDiscard(s);
+  };
+
+  const performDiscard = async () => {
+    const s = confirmDiscard;
+    if (!s) return;
+    setConfirmDiscard(null);
     setAttachingId(s.id);
     await updateFieldSubmission(s.id, { status: 'discarded' });
     setSubmissions(prev => prev.filter(x => x.id !== s.id));
@@ -346,6 +353,56 @@ export function FieldSubmissions({ data, userEdits, onAttachToProject, backendAv
           ))}
         </AnimatePresence>
       </div>
+
+      {/* Custom discard confirmation modal (replaces window.confirm which freezes
+          the renderer in MCP/headless contexts) */}
+      <AnimatePresence>
+        {confirmDiscard && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-brand-blue/40 backdrop-blur-sm"
+            onClick={() => setConfirmDiscard(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-100"
+            >
+              <div className="flex items-start gap-3 mb-4">
+                <div className="p-2 bg-red-50 rounded-xl text-red-600 mt-0.5">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-brand-blue">Discard submission?</h3>
+                  <p className="text-sm text-slate-500 mt-1">
+                    <span className="font-medium text-slate-700">{confirmDiscard.siteAddress}</span>
+                    <br />
+                    Marks status as <code className="text-[11px] px-1 bg-slate-100 rounded">discarded</code>. Can't be undone from the UI.
+                  </p>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  onClick={() => setConfirmDiscard(null)}
+                  className="px-4 py-2 text-sm font-bold text-slate-600 hover:text-brand-blue transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={performDiscard}
+                  className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-bold shadow-sm transition-colors"
+                >
+                  Discard
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </section>
   );
 }

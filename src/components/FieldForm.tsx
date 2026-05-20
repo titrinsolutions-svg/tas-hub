@@ -227,120 +227,202 @@ export function FieldForm({ role = 'field', projects = [] }: FieldFormProps) {
     setSunAtFirstPhoto(sunPosition(lat, lng, new Date()));
   };
 
-  const downloadWatermarkedPhoto = async (photo: PhotoData, customLabel?: string, notes?: string) => {
+  // Build the watermarked photo as a data URL. Pure function so we can use it
+  // for both single-photo download and the bulk "Download all" flow.
+  //
+  // Design philosophy: include ONLY objective auto-captured data. NO human-
+  // analysis fields (texture, Munsell, LCA class, drainage class). Opus reads
+  // the photo itself when she uploads to Claude Cowork at home.
+  const renderWatermarkedPhoto = async (
+    photo: PhotoData,
+    pit?: TestPit,
+    pitNumber?: number,
+  ): Promise<string | null> => {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!ctx) return null;
 
+    // Load the photo
     const img = new Image();
-    img.crossOrigin = "anonymous";
+    img.crossOrigin = 'anonymous';
     img.src = photo.url;
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error('photo load failed'));
+    }).catch(() => {});
 
-    await new Promise((resolve) => {
-      img.onload = resolve;
-    });
+    // Try to load the TITRIN logo (white version) for branding
+    let logoImg: HTMLImageElement | null = null;
+    try {
+      logoImg = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const li = new Image();
+        li.crossOrigin = 'anonymous';
+        li.onload = () => resolve(li);
+        li.onerror = () => reject(new Error('logo load failed'));
+        li.src = '/logo-white.png';
+      });
+    } catch { /* logo optional — use text fallback below */ }
 
-    const padding = 280; // Increased padding for notes
-    canvas.width = img.width;
-    canvas.height = img.height + padding;
+    const W = img.width;
+    const fs = Math.max(20, Math.floor(W / 48));    // base font size
+    const padX = Math.floor(W * 0.045);              // ~4.5% horizontal padding
+    const lineGap = fs * 1.35;
+    const titleGap = fs * 1.55;
 
-    // Draw background
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // Build the content lines (each is `null` if not available — skipped)
+    const t = photo.timestamp || new Date().toLocaleString();
+    const headingDir = photo.heading != null
+      ? ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(photo.heading / 45) % 8]
+      : null;
+    const gpsLine = photo.gps
+      ? `GPS: ${photo.gps.lat.toFixed(6)}, ${photo.gps.lng.toFixed(6)}`
+      : null;
+    const pitMeasureBits = pit ? [
+      pit.pitBaseDepthCm != null && `Base ${pit.pitBaseDepthCm}cm`,
+      pit.waterTablePresent && (pit.waterTableDepthCm != null
+        ? `Water ${pit.waterTableDepthCm}cm`
+        : 'Water present'),
+      pit.rootingDepthCm != null && `Roots ${pit.rootingDepthCm}cm`,
+    ].filter(Boolean) : [];
+    const pitMeasureLine = pitMeasureBits.length > 0 ? pitMeasureBits.join(' · ') : null;
+    const rainBit = pit?.hoursSinceLastRain != null ? `Rain ${pit.hoursSinceLastRain}h ago` : null;
+    const sunBit = sunAtFirstPhoto && sunAtFirstPhoto.isDaylight
+      ? `Sun ${sunAtFirstPhoto.elevation}° ${['N','NE','E','SE','S','SW','W','NW'][Math.round(sunAtFirstPhoto.azimuth/45)%8]}`
+      : null;
+    const contextLine = [rainBit, sunBit].filter(Boolean).join(' · ') || null;
 
-    // Draw image
+    // Title (large) + subtitle line
+    const titleText = `TAS · ${session.address || 'Unknown site'}`;
+    const subBits = [
+      pitNumber != null ? `Pit ${pitNumber}` : photo.label,
+      headingDir && photo.heading != null ? `Facing ${headingDir} (${Math.round(photo.heading)}°)` : null,
+    ].filter(Boolean);
+    const subtitleText = subBits.join(' · ');
+
+    // Compute footer height from how many lines we actually have
+    const dataLines = [gpsLine, t, pitMeasureLine, contextLine].filter(Boolean) as string[];
+    const footerH = Math.round(
+      padX * 0.9                                  // top padding
+      + fs * 1.5                                  // title row
+      + lineGap                                   // subtitle row
+      + lineGap * dataLines.length                // each data line
+      + padX * 0.9                                // bottom padding
+    );
+
+    canvas.width = W;
+    canvas.height = img.height + footerH;
+
+    // Draw photo
     ctx.drawImage(img, 0, 0);
 
-    // Draw footer area
-    ctx.fillStyle = '#1a2b3c'; // brand-blue
-    ctx.fillRect(0, img.height, canvas.width, padding);
+    // Draw footer — solid brand-blue (matches her example)
+    ctx.fillStyle = '#0f1a26';                    // deep slate-blue
+    ctx.fillRect(0, img.height, W, footerH);
 
-    // Draw text
+    // Logo block on the right (matches her example aesthetic)
+    const logoBlockW = Math.floor(footerH * 1.1);
+    const logoBlockH = footerH;
+    if (logoImg) {
+      // Black tile background + logo image
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(W - logoBlockW, img.height, logoBlockW, logoBlockH);
+      // Fit logo with ~75% of block, centred
+      const targetH = Math.floor(logoBlockH * 0.65);
+      const scale = targetH / logoImg.height;
+      const drawW = logoImg.width * scale;
+      const drawH = logoImg.height * scale;
+      const cx = W - logoBlockW + (logoBlockW - drawW) / 2;
+      const cy = img.height + (logoBlockH - drawH) / 2;
+      ctx.drawImage(logoImg, cx, cy, drawW, drawH);
+    } else {
+      // Text fallback
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(W - logoBlockW, img.height, logoBlockW, logoBlockH);
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'center';
+      ctx.font = `900 ${fs * 0.95}px Inter, sans-serif`;
+      ctx.fillText('TITRIN', W - logoBlockW / 2, img.height + logoBlockH / 2 - fs * 0.1);
+      ctx.font = `${fs * 0.55}px Inter, sans-serif`;
+      ctx.fillStyle = '#86efac';                  // brand-green-ish
+      ctx.fillText('AgriSoil Solutions', W - logoBlockW / 2, img.height + logoBlockH / 2 + fs * 0.7);
+    }
+
+    // Text region (everything left of the logo block)
+    const textRight = W - logoBlockW - padX;
+    let y = img.height + padX * 0.9 + fs;
+    ctx.textAlign = 'left';
+
+    // Title
     ctx.fillStyle = '#ffffff';
-    const fontSize = Math.max(14, Math.floor(img.width / 45));
-    ctx.font = `bold ${fontSize}px Inter, sans-serif`;
-    
-    const margin = 40;
-    const lineSpacing = fontSize * 1.4;
-    let currentY = img.height + margin + 10;
+    ctx.font = `900 ${fs * 1.25}px Inter, sans-serif`;
+    ctx.fillText(titleText, padX, y);
+    y += titleGap;
 
-    // Line 1: Label & File Number
-    ctx.fillText(`${(customLabel || photo.label).toUpperCase()} | FILE: ${session.fileNumber}`, margin, currentY);
-    
-    // Line 2: Date & Time & Weather
-    currentY += lineSpacing;
-    ctx.font = `${fontSize * 0.8}px Inter, sans-serif`;
-    ctx.fillText(`DATE: ${photo.timestamp} | WEATHER: ${photo.weather || 'N/A'}`, margin, currentY);
+    // Subtitle
+    ctx.fillStyle = '#cbd5e1';                    // slate-300
+    ctx.font = `600 ${fs * 0.85}px Inter, sans-serif`;
+    ctx.fillText(subtitleText, padX, y);
+    y += lineGap;
 
-    // Line 3: GPS & Heading
-    currentY += lineSpacing;
-    const gpsText = photo.gps ? `GPS: ${photo.gps.lat.toFixed(6)}, ${photo.gps.lng.toFixed(6)}` : 'GPS: N/A';
-    const headingText = photo.heading !== undefined ? `HEADING: ${Math.round(photo.heading)}°` : 'HEADING: N/A';
-    ctx.fillText(`${gpsText} | ${headingText}`, margin, currentY);
-
-    // Line 4: Soil Data
-    currentY += lineSpacing;
-    const lcaText = photo.lcaClass ? `LCA: ${photo.lcaClass}` : 'LCA: N/A';
-    const munsellText = photo.aiAnalysis?.munsell ? `MUNSELL: ${photo.aiAnalysis.munsell}` : 'MUNSELL: N/A';
-    const textureText = photo.aiAnalysis?.texture ? `TEXTURE: ${photo.aiAnalysis.texture}` : 'TEXTURE: N/A';
-    ctx.fillText(`${lcaText} | ${munsellText} | ${textureText}`, margin, currentY);
-
-    // Line 5: SIFT Data
-    if (photo.siftData) {
-      currentY += lineSpacing;
-      ctx.font = `${fontSize * 0.7}px Inter, sans-serif`;
-      ctx.fillStyle = '#cbd5e1'; // slate-300
-      ctx.fillText(`SIFT MAPPING: ${photo.siftData}`, margin, currentY);
-      ctx.fillStyle = '#ffffff';
-    }
-
-    // Line 6: Elevation & Topography
-    if (photo.elevation || photo.topography) {
-      currentY += lineSpacing;
-      ctx.font = `${fontSize * 0.7}px Inter, sans-serif`;
-      ctx.fillStyle = '#94a3b8'; // slate-400
-      const elevText = photo.elevation ? `ELEVATION: ${photo.elevation}` : 'ELEVATION: N/A';
-      const topoText = photo.topography ? `TOPOGRAPHY: ${photo.topography}` : 'TOPOGRAPHY: N/A';
-      const sourceText = photo.elevationSource ? ` (Source: ${photo.elevationSource})` : '';
-      ctx.fillText(`${elevText} | ${topoText}${sourceText}`, margin, currentY);
-      ctx.fillStyle = '#ffffff';
-    }
-
-    // Line 7: Notes (if any)
-    if (notes || photo.aiAnalysis?.notes) {
-      currentY += lineSpacing * 1.2;
-      ctx.font = `italic ${fontSize * 0.7}px Inter, sans-serif`;
-      ctx.fillStyle = '#94a3b8'; // slate-400
-      const noteText = `NOTES: ${notes || photo.aiAnalysis?.notes}`;
-      // Basic text wrapping for notes
-      const maxWidth = canvas.width - (margin * 2);
-      const words = noteText.split(' ');
-      let line = '';
-      for(let n = 0; n < words.length; n++) {
-        const testLine = line + words[n] + ' ';
-        const metrics = ctx.measureText(testLine);
-        if (metrics.width > maxWidth && n > 0) {
-          ctx.fillText(line, margin, currentY);
-          line = words[n] + ' ';
-          currentY += lineSpacing * 0.8;
-        } else {
-          line = testLine;
-        }
+    // Data lines (smaller, lighter)
+    ctx.font = `${fs * 0.75}px ui-monospace, Menlo, monospace`;
+    ctx.fillStyle = '#94a3b8';                    // slate-400
+    for (const line of dataLines) {
+      // Trim to textRight if too long (shouldn't happen at these sizes but safety)
+      const maxW = textRight - padX;
+      let drawn = line;
+      while (ctx.measureText(drawn).width > maxW && drawn.length > 8) {
+        drawn = drawn.slice(0, -2);
       }
-      ctx.fillText(line, margin, currentY);
+      ctx.fillText(drawn, padX, y);
+      y += lineGap;
     }
 
-    // Draw Logo
-    ctx.fillStyle = '#ffffff';
-    ctx.font = `black ${fontSize * 1.2}px Inter, sans-serif`;
-    ctx.textAlign = 'right';
-    ctx.fillText('TITRIN AGRI-SOIL', canvas.width - margin, img.height + padding - margin);
+    return canvas.toDataURL('image/jpeg', 0.92);
+  };
 
+  const downloadWatermarkedPhoto = async (
+    photo: PhotoData,
+    pit?: TestPit,
+    pitNumber?: number,
+    filenameLabel?: string,
+  ) => {
+    const dataUrl = await renderWatermarkedPhoto(photo, pit, pitNumber);
+    if (!dataUrl) return;
+    const safeAddr = (session.address || 'site').replace(/[^a-z0-9]+/gi, '-').toLowerCase().slice(0, 40);
+    const tag = filenameLabel || (pitNumber != null ? `pit${pitNumber}` : 'photo');
     const link = document.createElement('a');
-    link.download = `${customLabel || photo.label}-${photo.id}.jpg`;
-    link.href = canvas.toDataURL('image/jpeg', 0.9);
+    link.download = `TAS-${safeAddr}-${tag}-${photo.id}.jpg`;
+    link.href = dataUrl;
     link.click();
   };
+
+  const [bulkDownloading, setBulkDownloading] = useState(false);
+  const downloadAllPhotos = async () => {
+    if (bulkDownloading) return;
+    setBulkDownloading(true);
+    try {
+      // Pit photos (most important — these are the LCA evidence)
+      for (let i = 0; i < testPits.length; i++) {
+        const pit = testPits[i];
+        if (pit.photo) {
+          await downloadWatermarkedPhoto(pit.photo, pit, i + 1);
+          // brief delay so the browser doesn't drop simultaneous downloads
+          await new Promise(r => setTimeout(r, 350));
+        }
+      }
+      // Site overview / loose photos
+      for (let i = 0; i < photos.length; i++) {
+        const p = photos[i];
+        await downloadWatermarkedPhoto(p, undefined, undefined, p.label.replace(/[^a-z0-9]+/gi, '-').toLowerCase());
+        await new Promise(r => setTimeout(r, 350));
+      }
+    } finally {
+      setBulkDownloading(false);
+    }
+  };
+
+  const hasAnyPhoto = testPits.some(p => p.photo) || photos.length > 0;
 
   const analyzeSoilImage = async (photoId: string, base64Data: string, isPit: boolean = false) => {
     setIsAnalyzing(photoId);
@@ -748,33 +830,48 @@ SIGNATURE: ${signature ? 'Captured' : 'Pending'}
             </button>
             <button
               onClick={generateNotesCard}
-              className="flex items-center gap-2 px-5 py-2 bg-slate-100 text-slate-700 rounded-xl font-bold text-sm hover:bg-slate-200 transition-colors"
+              className="hidden md:flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-xl font-bold text-sm hover:bg-slate-200 transition-colors"
               title="Copy a text summary to clipboard (does NOT submit to admin)"
             >
               <FileText className="w-4 h-4" />
-              Copy for Claude
+              Copy
             </button>
             <button
               onClick={submitToAdmin}
               disabled={submitState === 'submitting'}
               className={cn(
-                "flex items-center gap-2 px-6 py-2 text-white rounded-xl font-bold shadow-lg transition-all",
-                submitState === 'success'
-                  ? "bg-brand-green shadow-brand-green/20"
-                  : submitState === 'error'
-                  ? "bg-red-600 shadow-red-600/20"
-                  : "bg-brand-blue shadow-brand-blue/20 hover:scale-105",
+                "hidden md:flex items-center gap-2 px-4 py-2 text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold text-sm transition-all",
+                submitState === 'success' && "bg-brand-green/15 text-brand-green",
+                submitState === 'error' && "bg-red-100 text-red-700",
                 submitState === 'submitting' && "opacity-70 cursor-wait"
               )}
+              title="Quiet backup — also stores in Netlify Blobs"
             >
               {submitState === 'submitting' ? (
                 <><Loader2 className="w-4 h-4 animate-spin" /> Submitting…</>
               ) : submitState === 'success' ? (
-                <><CheckCircle2 className="w-4 h-4" /> Submitted to admin</>
+                <><CheckCircle2 className="w-4 h-4" /> Submitted</>
               ) : submitState === 'error' ? (
-                <><AlertCircle className="w-4 h-4" /> Try again</>
+                <><AlertCircle className="w-4 h-4" /> Retry</>
               ) : (
-                <><Save className="w-4 h-4" /> Submit to admin</>
+                <><Save className="w-4 h-4" /> Submit (backup)</>
+              )}
+            </button>
+            <button
+              onClick={downloadAllPhotos}
+              disabled={!hasAnyPhoto || bulkDownloading}
+              className={cn(
+                "flex items-center gap-2 px-6 py-2 text-white rounded-xl font-bold shadow-lg transition-all",
+                hasAnyPhoto && !bulkDownloading
+                  ? "bg-brand-blue shadow-brand-blue/20 hover:scale-105"
+                  : "bg-slate-300 cursor-not-allowed"
+              )}
+              title="Save all photos to your gallery with watermarked metadata. Upload to Claude Cowork at home."
+            >
+              {bulkDownloading ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</>
+              ) : (
+                <><Download className="w-4 h-4" /> Download all photos</>
               )}
             </button>
           </div>
@@ -1393,12 +1490,12 @@ SIGNATURE: ${signature ? 'Captured' : 'Pending'}
                         <div className="relative rounded-2xl overflow-hidden border border-slate-200 group">
                           <img src={pit.photo.url} alt={`Pit ${index + 1}`} className="w-full h-48 object-cover" />
                           <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
-                            <button 
-                              onClick={() => downloadWatermarkedPhoto(pit.photo!, `Test Pit ${index + 1}`, pit.notes)}
+                            <button
+                              onClick={() => downloadWatermarkedPhoto(pit.photo!, pit, index + 1)}
                               className="p-3 bg-white text-brand-blue rounded-xl font-bold shadow-lg hover:scale-110 transition-transform flex items-center gap-2"
                             >
                               <Download className="w-4 h-4" />
-                              <span className="text-xs">Download with Notes</span>
+                              <span className="text-xs">Download Watermarked</span>
                             </button>
                             <button 
                               onClick={() => updateTestPit(pit.id, 'photo', undefined)}
@@ -1456,31 +1553,24 @@ SIGNATURE: ${signature ? 'Captured' : 'Pending'}
             </div>
 
             <div className="space-y-6">
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Drainage Class</label>
-                <select 
-                  value={observations.drainage}
-                  onChange={e => setObservations({...observations, drainage: e.target.value})}
-                  className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-brand-green transition-all appearance-none"
-                >
-                  {DRAINAGE_CLASSES.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
-              </div>
+              <p className="text-[11px] text-slate-500 font-medium leading-relaxed border-l-2 border-amber-200 pl-3">
+                Only fields Opus can't get from photos + aerials. Drainage class is derived from pit morphology — don't enter it here.
+              </p>
 
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Smell / Odor</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={observations.smell}
                   onChange={e => setObservations({...observations, smell: e.target.value})}
                   className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-brand-green transition-all"
-                  placeholder="e.g. None, Septic, Sulfur"
+                  placeholder="e.g. None, peat, septic, sulfur"
                 />
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Setbacks</label>
-                <select 
+                <select
                   value={observations.setbacks}
                   onChange={e => setObservations({...observations, setbacks: e.target.value})}
                   className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-brand-green transition-all appearance-none"
@@ -1493,17 +1583,17 @@ SIGNATURE: ${signature ? 'Captured' : 'Pending'}
 
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Owner Input / History</label>
-                <textarea 
+                <textarea
                   value={observations.ownerInput}
                   onChange={e => setObservations({...observations, ownerInput: e.target.value})}
                   className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-brand-green transition-all h-24 resize-none"
-                  placeholder="What did the owner mention?"
+                  placeholder="What did the owner mention? Past fill, tile drains, prior reports?"
                 />
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Critical Issues</label>
-                <textarea 
+                <textarea
                   value={observations.issues}
                   onChange={e => setObservations({...observations, issues: e.target.value})}
                   className="w-full px-4 py-3 bg-red-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-red-500 transition-all h-24 resize-none text-red-900 placeholder:text-red-300"
