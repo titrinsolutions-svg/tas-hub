@@ -1,0 +1,212 @@
+[
+  {
+    "name": "37071 Lougheed Hwy, Dewdney — TAS 25.0098",
+    "client": "Wes Mader / W Mader Excavating & Trucking (wmader@telus.net) · FVRD: Austin Stobbs (astobbs@fvrd.ca)",
+    "badge": "sfu",
+    "badgeLabel": "SFU Application",
+    "status": "active",
+    "note": "✅ INVOICE PAID IN FULL ($3,900 Mar 25). Kathy Vink confirmed payment. ALC Application #107046 submitted and acknowledged by FVRD. Awaiting ALC planner assignment.",
+    "action": "Await ALC planner assignment. Project in ALC's hands.",
+    "actionType": "normal"
+  },
+  {
+    "name": "8646 Mandeville Ave, Burnaby — TAS 26.0001",
+    "client": "Billy Bi (billybiwe@gmail.com) · C. Li · Company: LCM FARM LTD. · Owner: Chenming LI",
+    "badge": "fp",
+    "badgeLabel": "Farm Plan",
+    "status": "urgent",
+    "note": "✅ ALL MATERIALS IN HAND — WRITE FARM PLAN NOW. Site plan received Apr 1. Floor plan (MAIN FLOOR PLAN-A1.pdf) received. CARO soil test results arrived Apr 2 (Work Order 26D0281). Crop: blueberries (confirmed). No farm road. Lot pre-1978 confirmed ✅ (ALC Plan No.7, July 1974). Full $5,250 retainer paid.",
+    "action": "WRITE FARM PLAN → submit to City of Burnaby + client → invoice ~$4,250+ balance.",
+    "actionType": "urgent"
+  },
+  {
+    "name": "13571 Blundell Rd, Richmond — TAS 26.0002",
+    "client": "Zack Zhai (zackzhaiyi@gmail.com) · Bob / City Concept (cityconcept@hotmail.com)",
+    "badge": "fp",
+    "badgeLabel": "Farm Plan + RMA",
+    "status": "active",
+    "note": "✅ CITY APPROVED — Both RMA Report and Farm Plan approved by City of Richmond. 💰 CASH PAYMENT CONFIRMED: $3,550 (RMA) + $3,550 (Farm Plan) = $7,100 cash total. NO INVOICE to be generated. CoR CD 205705 ongoing (RZ application for greenhouse).",
+    "action": "Collect $7,100 cash from Zack. Once received, mark project complete.",
+    "actionType": "normal"
+  },
+  {
+    "name": "8451 No. 5 Road (JKCE Retainer)",
+    "client": "JKCE Probuild — Phoebe · Judy Chu · James Wang · Councillor Kash Heed (kheed@telus.net)",
+    "badge": "fp",
+    "badgeLabel": "Retainer",
+    "status": "urgent",
+    "note": "🔴 STOP-WORK ORDER ESCALATION. James Hnatowich (CoR) 3-step path: (1) BP mod for retaining wall, (2) fill area drawing, (3) landscaping screening. Tish forwarded to Kash Heed, awaiting direction. Feb retainer PAID ✅. ⚠️ April invoice draft #26040208 created Apr 2 to Gavin — shows $1,575 incl. GST (expected ~$4,200). VERIFY BEFORE SENDING.",
+    "action": "⚠️ Review + fix JKCE April invoice amount before sending. Await Kash Heed direction → prepare fill area drawing + landscaping plan → apply for BP modification (BP 24-038247).",
+    "actionType": "urgent"
+  },
+  {
+    "name": "Colwood Creek Park",
+    "client": "City of Colwood — Ryan Campeau (rcampeau@colwood.ca)",
+    "badge": "alc",
+    "badgeLabel": "ALC Application",
+    "status": "active",
+    "note": "Municipal-initiated ALC exclusion application. TAS content submitted Mar 17. Ryan confirmed receipt Mar 19: 'Thanks for the well thought out content. We'll insert it into the application and keep you posted.' City handling portal submission. Invoice #26031202 outstanding ($5,250).",
+    "action": "Await update from Ryan on ALC portal submission. Follow up on outstanding invoice #26031202 ($5,250).",
+    "actionType": "normal"
+  },
+  {
+    "name": "7251 Sidaway Road, Richmond — NEW",
+    "client": "Lily Qian (lilyqian2012@gmail.com) · Han Le (hanle02@yahoo.com) · Susan Van der Ende (Madrone)",
+    "badge": "fp",
+    "badgeLabel": "Farm Plan + Road",
+    "status": "active",
+    "note": "Susan sent initial farm layout (25.0029_Fig1.pdf) to Han Le Mar 27 — asked Han to approve road/blueberry layout to finalize Farm Plan. Han confirmed keeping remaining funds on Farm Plan. Geotech received Mar 23 ✓. Project delayed 1+ year for road layout — Susan proposed estimating locations to finalize.",
+    "action": "Await Han Le's approval of Susan's farm layout. Coordinate with Susan once approved. Reply to Han Le re: cost/timeline. Get client agreement signed.",
+    "actionType": "normal"
+  },
+  {
+    "name": "Terrablue ALC Package — TAS 26.0005",
+    "client": "G Athwal (g@terrablue.ca) · Ram Raj (rajneshram@rocketmail.com)",
+    "badge": "fqa",
+    "badgeLabel": "Reclamation + FQA",
+    "status": "hold",
+    "note": "Reclamation Plan + FQA + Site Plan. Estimated $8,750 + GST. Retainer confirmed by G Athwal Mar 11 but STILL NOT received. Tish followed up Mar 16 — no response. Do not begin any work.",
+    "action": "Follow up AGAIN with G Athwal — retainer payment of $5,000 + GST required before any work starts",
+    "actionType": "urgent"
+  },
+  {
+    "name": "16960 River Road — TAS 26.0007",
+    "client": "Fanny Liang · Greg Howard R.P.Bio / Justin Lange / Alicia Mildner (Madrone new team) · Tony Kwan (lawyer)",
+    "badge": "cemp",
+    "badgeLabel": "CEMP + EIA",
+    "status": "active",
+    "note": "⚠️ DFO consultation required (Greg Howard confirmed Apr 2). Greg connecting with DFO Habitat Officer. Susan Van der Ende departing Madrone — Greg, Justin, Alicia taking over. Fanny's $10,000 check expected week of Mar 30 — NOT YET RECEIVED. Tish sent detailed Mar 31 email arguing WSA exemption + no HADD + no ESA comp needed.",
+    "action": "💰 Follow up with Fanny re: $10,000 check. Await Greg Howard's DFO follow-up. Await City response on rezoning. Neighbor signature still needed for tree removal.",
+    "actionType": "normal"
+  },
+  {
+    "name": "9431 Finn Road — TAS 26.0008",
+    "client": "Kush Bains (kushbains@msn.com)",
+    "badge": "alc",
+    "badgeLabel": "Barn Application",
+    "status": "hold",
+    "note": "Barn application revision in progress. Kush emailed Mar 11 asking for progress update (back from India). Draft reply sitting in Gmail Drafts.",
+    "action": "Review and send draft reply to Kush from Gmail Drafts",
+    "actionType": "normal"
+  },
+  {
+    "name": "Farm Road — Ecological Park / Luniu Mall — TAS 26.0009",
+    "client": "Luniu Mall (accounting@luniumall.com) · Harvey Du, M.Arch. BoutHouse Design (harvey.bouthouse@gmail.com) · Phoebe (JKCE) · Bob Drinkwater (knotweed QE)",
+    "badge": "fp",
+    "badgeLabel": "Farm Road",
+    "status": "active",
+    "note": "Mar 23: Harvey Du (BoutHouse Design) sent updated site plan — 4m Farm Road + 2.5m SRW for Blundell Rd upgrade. Tish replied asking Harvey to state road area m2 and show pre-existing road. Awaiting Harvey's response. Knotweed email (Mar 21) still UNREAD. CoR ESA DP staff comments (Mar 17) still to review. $3,000 e-transfer (Mar 13) — unmatched.",
+    "action": "Await Harvey Du response re: road m2. Read knotweed email. Review CoR ESA DP comments. Match $3,000 e-transfer to invoice.",
+    "actionType": "normal"
+  },
+  {
+    "name": "NEW INQUIRY — 22040 River Rd, Richmond (Avtar Thandi / CoR CD 207905)",
+    "client": "Avtar Thandi (avthandi@live.ca)",
+    "badge": "new",
+    "badgeLabel": "Fill App / New",
+    "status": "new",
+    "note": "Mar 23: Avtar Thandi forwarded CoR email from Mike Morin re: fill application CD 207905 at 22040 River Rd. CoR not requiring farm plan/geotech/drainage now. However, if Council authorizes forwarding to ALC, those reports will be required. Avtar seems to be seeking TAS's involvement for the ALC stage. UNREAD — reviewed by Claude EOD.",
+    "action": "Reply to Avtar Thandi — introduce TAS, confirm scope of work needed at ALC stage (farm plan, FQA, drainage), provide fee estimate.",
+    "actionType": "normal"
+  },
+  {
+    "name": "10491 Granville Ave, Richmond — TAS 26.0011",
+    "client": "Martin Zhang (martinzhang6288@gmail.com) · Payor: HONGXING ZHU · City: Mike Morin (CoR)",
+    "badge": "sfu",
+    "badgeLabel": "SFU + Farm Plan",
+    "status": "active",
+    "note": "SFU invoice paid ($3,675 ✓). Farm Plan retainer $5,000 PAID ✓. Additional $250 received Mar 26 from HONGXING ZHU (purpose unclear — needs clarification). Li Moning outlined 6 report elements. Draft reply to Li Moning in Gmail Drafts.",
+    "action": "⚠️ Clarify $250 payment from Hongxing Zhu. Send draft reply to Li Moning. Begin Farm Plan. Confirm $1,092 ALC fee paid to CoR.",
+    "actionType": "normal"
+  },
+  {
+    "name": "NDA Project — 12600–12700 Blundell Road",
+    "client": "Andrew Wong (andrew.wong@gcslaoc.com) — via Kevin Liu (Pack Buildings)",
+    "badge": "new",
+    "badgeLabel": "NDA / New",
+    "status": "active",
+    "note": "Tish replied to Andrew Mar 26 — asked for NDA to e-sign (only sees zip with final assessment), requested scope of work for retainer quote. Confidential project.",
+    "action": "Await Andrew's reply with NDA and scope details. Then sign NDA and provide retainer quote.",
+    "actionType": "normal"
+  },
+  {
+    "name": "NEW — Richmond Road Access (Han Le)",
+    "client": "Han Le — contact via Gmail",
+    "badge": "new",
+    "badgeLabel": "Road / New",
+    "status": "new",
+    "note": "Han Le inquiring about road access on Richmond agricultural property. Questions: (1) per-parcel or combined cost estimate? (2) what is included in TAS scope? Draft reply prepared in Gmail Drafts.",
+    "action": "Review draft reply in Gmail Drafts and send to Han Le",
+    "actionType": "normal"
+  },
+  {
+    "name": "NEW — Agro-Tourism Bowen Island (Raef Grohne / Stonefield Properties)",
+    "client": "Raef Grohne — Stonefield Properties",
+    "badge": "new",
+    "badgeLabel": "Agro-Tourism / New",
+    "status": "new",
+    "note": "Prospective client exploring agro-tourism options on Bowen Island. Hasn't started Farm Status application. Substantive draft reply prepared in Gmail Drafts covering TAS scope and approach.",
+    "action": "Review and send draft reply to Raef Grohne from Gmail Drafts",
+    "actionType": "normal"
+  },
+  {
+    "name": "NEW — 14651 Westminster Hwy (Colin Exo — NOI)",
+    "client": "Colin Exo",
+    "badge": "alc",
+    "badgeLabel": "NOI / New",
+    "status": "new",
+    "note": "New NOI application inquiry — 14651 Westminster Hwy. Scope and fee TBD.",
+    "action": "Follow up with Colin Exo to scope NOI application",
+    "actionType": "normal"
+  },
+  {
+    "name": "NEW — 14611 Westminster Hwy (Cattarina Chan Picketts — Closure Report)",
+    "client": "Cattarina Chan Picketts",
+    "badge": "new",
+    "badgeLabel": "Closure / New",
+    "status": "new",
+    "note": "New contact sent Removal & Remediation Order (Feb 10, 2026). Needs closure report. Draft reply prepared.",
+    "action": "Review draft reply and send. Assess TAS scope and fee for closure report.",
+    "actionType": "normal"
+  },
+  {
+    "name": "Port Coquitlam Fill Site — Anderson Restoration (NEW / Unlisted)",
+    "client": "Mark Anderson — Anderson Restoration & Landscaping (amamark65@gmail.com, 604-209-5921)",
+    "badge": "new",
+    "badgeLabel": "Site Monitoring",
+    "status": "new",
+    "note": "Active ALC-regulated fill site. Mark Anderson emailed Tish + Roy Biedrava (ALC Enforcement) Mar 17 — site closed due to wet conditions / atmospheric river. Roy Biedrava confirmed to City of Port Coquitlam (Tony) that Tish is monitoring the site. This project was not previously listed. Confirm file number and fee arrangement.",
+    "action": "Confirm engagement details (scope, fee, file number). Reply when site conditions improve.",
+    "actionType": "normal"
+  },
+  {
+    "name": "Nanaimo Sewer Upgrade — Active Earth Engineering (NEW)",
+    "client": "Gundeep Randhawa, PAg — Active Earth Engineering (gundeep.randhawa@activeearth.ca) via David Kim (Madrone)",
+    "badge": "alc",
+    "badgeLabel": "ALC Oversight",
+    "status": "new",
+    "note": "New sub-consultant engagement. David Kim (Madrone) forwarded RFP Mar 19 and intro'd Tish directly to Gundeep Randhawa (Active Earth) on Mar 20. Tish proposed $4,500 fixed fee (3 milestones: $2,000 onboarding, $1,500 mid-project, $1,000 completion). No response yet.",
+    "action": "Follow up with Gundeep Randhawa at Active Earth to confirm engagement.",
+    "actionType": "normal"
+  },
+  {
+    "name": "🆕 Riverview Ball Diamond Renewal — City of Coquitlam (NEW)",
+    "client": "City of Coquitlam — Irene Shams, Project Coordinator (IShams@coquitlam.ca, 604-671-0276)",
+    "badge": "new",
+    "badgeLabel": "Sampling / New",
+    "status": "new",
+    "note": "NEW INQUIRY received Mar 30. Irene Shams requesting sand sample collection from ROOTzone deliveries (Veratec) for laboratory testing. Subgrade prep nearing completion. Short notice — delivery timing TBD. Two attachments: Agrologist Services contract + Veratec-ROOTzone product spec.",
+    "action": "RESPOND TO IRENE ASAP — review attachments, confirm availability for sample collection, coordinate timing.",
+    "actionType": "urgent"
+  },
+  {
+    "name": "🆕 2280 No.6 Rd, Richmond — Soil Monitoring + AOR (Hilson / NEW Apr 2)",
+    "client": "Hilson / 庆业李 (qingye1998@gmail.com) — referred by Susan Van der Ende (Madrone)",
+    "badge": "new",
+    "badgeLabel": "Soil Monitoring / New",
+    "status": "new",
+    "note": "NEW inquiry Apr 2. Susan Van der Ende (Madrone) referred Hilson — Madrone lacks capacity. City (Mike Morin) requires a retained PAg for soil removal/fill permit validity. Client needs PAg oversight + closure report. Tish sent client agreement + agent auth forms Apr 2. Hilson asked about cost → Tish replied: $5,000 + GST retainer, total $5-9k range.",
+    "action": "Await signed client agreement + $5,000 + GST retainer from Hilson. Time-sensitive — City permit validity at stake.",
+    "actionType": "normal"
+  }
+]
