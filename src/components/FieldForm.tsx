@@ -467,6 +467,45 @@ export function FieldForm({ role = 'field', projects = [] }: FieldFormProps) {
   };
 
   const [bulkDownloading, setBulkDownloading] = useState(false);
+  // Tracks which photos have been saved to the gallery in this session.
+  // Each entry is `pit:<id>:<photoId>:<dataHash>` for pit photos
+  // or `site:<id>` for site overview photos. We include a hash of the pit's
+  // data fields so editing base depth / water table / etc. invalidates the
+  // saved badge and prompts the tech to re-save.
+  const [savedPhotoKeys, setSavedPhotoKeys] = useState<Set<string>>(new Set());
+
+  const pitSaveKey = (pit: TestPit) => {
+    if (!pit.photo) return null;
+    const dataSig = [
+      pit.pitBaseDepthCm ?? '-',
+      pit.waterTablePresent ? (pit.waterTableDepthCm ?? 'y') : '-',
+      pit.rootingDepthCm ?? '-',
+      pit.hoursSinceLastRain ?? '-',
+    ].join('|');
+    return `pit:${pit.id}:${pit.photo.id}:${dataSig}`;
+  };
+  const siteSaveKey = (photoId: string) => `site:${photoId}`;
+
+  const markSaved = (key: string) => {
+    setSavedPhotoKeys(prev => {
+      const next = new Set(prev);
+      next.add(key);
+      return next;
+    });
+  };
+
+  const savePitPhoto = async (pit: TestPit, index: number) => {
+    if (!pit.photo) return;
+    await downloadWatermarkedPhoto(pit.photo, pit, index + 1);
+    const key = pitSaveKey(pit);
+    if (key) markSaved(key);
+  };
+
+  const saveSitePhoto = async (photo: PhotoData) => {
+    await downloadWatermarkedPhoto(photo, undefined, undefined, photo.label.replace(/[^a-z0-9]+/gi, '-').toLowerCase());
+    markSaved(siteSaveKey(photo.id));
+  };
+
   const downloadAllPhotos = async () => {
     if (bulkDownloading) return;
     setBulkDownloading(true);
@@ -1230,20 +1269,43 @@ SIGNATURE: ${signature ? 'Captured' : 'Pending'}
                       <img src={photo.url} alt={photo.label} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
                       
                       <div className="absolute top-4 right-4 flex gap-2">
-                        <button 
-                          onClick={() => downloadWatermarkedPhoto(photo)}
-                          className="p-2.5 bg-white/90 backdrop-blur-md text-brand-blue rounded-xl shadow-lg hover:bg-white transition-all"
-                          title="Download Professional Record"
-                        >
-                          <Download className="w-4 h-4" />
-                        </button>
-                        <button 
+                        <button
                           onClick={() => setPhotos(photos.filter(p => p.id !== photo.id))}
                           className="p-2.5 bg-white/90 backdrop-blur-md text-red-500 rounded-xl shadow-lg hover:bg-red-50 transition-all"
+                          title="Delete this photo"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
+                      {savedPhotoKeys.has(siteSaveKey(photo.id)) && (
+                        <div className="absolute top-4 left-4 px-3 py-1.5 bg-brand-green/90 backdrop-blur-md text-white rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 shadow-lg">
+                          <CheckCircle2 className="w-3 h-3" /> Saved
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Save-to-gallery button — primary handoff path */}
+                    <div className="px-5 pt-4">
+                      {(() => {
+                        const saved = savedPhotoKeys.has(siteSaveKey(photo.id));
+                        return (
+                          <button
+                            onClick={() => saveSitePhoto(photo)}
+                            className={cn(
+                              "w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm transition-all",
+                              saved
+                                ? "bg-brand-green/15 text-brand-green border border-brand-green/30"
+                                : "bg-brand-blue text-white shadow-md hover:scale-[1.01]"
+                            )}
+                          >
+                            {saved ? (
+                              <><CheckCircle2 className="w-4 h-4" /> Saved to gallery ✓</>
+                            ) : (
+                              <><Download className="w-4 h-4" /> Save photo to gallery</>
+                            )}
+                          </button>
+                        );
+                      })()}
                     </div>
 
                     {/* Professional Data Card (Underneath Photo) */}
@@ -1611,38 +1673,58 @@ SIGNATURE: ${signature ? 'Captured' : 'Pending'}
                     </div>
 
                     {/* Test Pit Photo Section */}
-                    <div className="md:col-span-3 pt-2">
+                    <div className="md:col-span-3 pt-2 space-y-3">
                       {pit.photo ? (
-                        <div className="relative rounded-2xl overflow-hidden border border-slate-200 group">
-                          <img src={pit.photo.url} alt={`Pit ${index + 1}`} className="w-full h-48 object-cover" />
-                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
-                            <button
-                              onClick={() => downloadWatermarkedPhoto(pit.photo!, pit, index + 1)}
-                              className="p-3 bg-white text-brand-blue rounded-xl font-bold shadow-lg hover:scale-110 transition-transform flex items-center gap-2"
-                            >
-                              <Download className="w-4 h-4" />
-                              <span className="text-xs">Download Watermarked</span>
-                            </button>
-                            <button 
-                              onClick={() => updateTestPit(pit.id, 'photo', undefined)}
-                              className="p-3 bg-white text-red-500 rounded-xl font-bold shadow-lg hover:scale-110 transition-transform"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                          <div className="absolute bottom-3 left-3 flex flex-col gap-1">
-                            <div className="px-3 py-1 bg-brand-blue/80 backdrop-blur-md text-white rounded-lg text-[10px] font-bold uppercase tracking-widest">
-                              Pit #{index + 1} Photo
+                        <>
+                          <div className="relative rounded-2xl overflow-hidden border border-slate-200 group">
+                            <img src={pit.photo.url} alt={`Pit ${index + 1}`} className="w-full h-48 object-cover" />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                              <button
+                                onClick={() => updateTestPit(pit.id, 'photo', undefined)}
+                                className="p-3 bg-white text-red-500 rounded-xl font-bold shadow-lg hover:scale-110 transition-transform"
+                                title="Delete this photo"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
                             </div>
-                            {pit.photo.siftData && (
-                              <div className="px-3 py-1 bg-brand-gold/90 backdrop-blur-md text-white rounded-lg text-[8px] font-bold uppercase tracking-widest max-w-[200px] truncate">
-                                SIFT: {pit.photo.siftData}
+                            <div className="absolute bottom-3 left-3 flex flex-col gap-1">
+                              <div className="px-3 py-1 bg-brand-blue/80 backdrop-blur-md text-white rounded-lg text-[10px] font-bold uppercase tracking-widest">
+                                Pit #{index + 1} Photo
                               </div>
-                            )}
+                            </div>
                           </div>
-                        </div>
+
+                          {/* Save-to-gallery primary action — survives crashes */}
+                          {(() => {
+                            const key = pitSaveKey(pit);
+                            const saved = key ? savedPhotoKeys.has(key) : false;
+                            return (
+                              <button
+                                onClick={() => savePitPhoto(pit, index)}
+                                className={cn(
+                                  "w-full flex items-center justify-center gap-2 py-3 rounded-2xl font-bold text-sm transition-all",
+                                  saved
+                                    ? "bg-brand-green/15 text-brand-green border border-brand-green/30"
+                                    : "bg-brand-blue text-white shadow-lg shadow-brand-blue/20 hover:scale-[1.01]"
+                                )}
+                              >
+                                {saved ? (
+                                  <>
+                                    <CheckCircle2 className="w-4 h-4" />
+                                    Saved to gallery ✓ (re-save if you edit any field above)
+                                  </>
+                                ) : (
+                                  <>
+                                    <Download className="w-4 h-4" />
+                                    Save photo to gallery
+                                  </>
+                                )}
+                              </button>
+                            );
+                          })()}
+                        </>
                       ) : (
-                        <button 
+                        <button
                           onClick={() => {
                             setActivePitId(pit.id);
                             setIsCapturing(true);
