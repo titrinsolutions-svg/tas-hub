@@ -35,7 +35,7 @@ import {
   LOGOS
 } from '../constants';
 import { GoogleGenAI, Type } from "@google/genai";
-import { submitFieldData, fetchWeather, reverseGeocode, type WeatherSnapshot, type GeocodeResult } from '../lib/api';
+import { submitFieldData, reverseGeocode, type GeocodeResult } from '../lib/api';
 import { sunPosition, describeSun, type SunPosition } from '../lib/sun';
 import type { Project } from '../types';
 
@@ -210,29 +210,21 @@ export function FieldForm({ role = 'field', projects = [] }: FieldFormProps) {
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   // ── Auto-captured operational context ─────────────────────────────────
-  const [weather, setWeather] = useState<WeatherSnapshot | null>(null);
-  const [weatherStatus, setWeatherStatus] = useState<'idle' | 'fetching' | 'done' | 'error'>('idle');
+  // Weather is intentionally NOT fetched here — Cowork pulls authoritative
+  // ECCC historical data for the exact GPS + timestamp when drafting the report.
   const [geocode, setGeocode] = useState<GeocodeResult | null>(null);
   const [sunAtFirstPhoto, setSunAtFirstPhoto] = useState<SunPosition | null>(null);
+  const [hydrated, setHydrated] = useState(false);
 
-  // Fire weather + geocode the moment we have a stable GPS lock.
-  // Triggered by photo capture (since photo captures GPS) or pit GPS.
+  // Fires once when first GPS lock arrives. Reverse-geocode catches address
+  // typos; sun angle is pure math used by Cowork to correct Munsell color
+  // estimation. Both run silently — field tech does nothing extra.
   const hydrateContextFromGps = async (lat: number, lng: number) => {
-    if (weatherStatus !== 'idle' && weatherStatus !== 'error') return;
-    setWeatherStatus('fetching');
-    try {
-      const [w, g] = await Promise.all([
-        fetchWeather(lat, lng),
-        reverseGeocode(lat, lng),
-      ]);
-      if (w) setWeather(w);
-      if (g) setGeocode(g);
-      setWeatherStatus('done');
-      // Sun angle now
-      setSunAtFirstPhoto(sunPosition(lat, lng, new Date()));
-    } catch {
-      setWeatherStatus('error');
-    }
+    if (hydrated) return;
+    setHydrated(true);
+    const g = await reverseGeocode(lat, lng);
+    if (g) setGeocode(g);
+    setSunAtFirstPhoto(sunPosition(lat, lng, new Date()));
   };
 
   const downloadWatermarkedPhoto = async (photo: PhotoData, customLabel?: string, notes?: string) => {
@@ -663,10 +655,10 @@ SIGNATURE: ${signature ? 'Captured' : 'Pending'}
       generalNotes: siteInfo.generalNotes || undefined,
     };
 
-    // Auto-captured operational context — Cowork uses for triage, not as
-    // primary citation. Report citations come from ECCC (Cowork pulls separately).
+    // Auto-captured operational context. Weather is intentionally NOT here —
+    // Cowork pulls historical ECCC data for the exact GPS + photo timestamps
+    // when drafting the report, which is the authoritative regulatory source.
     const opsContext = {
-      weather: weather || undefined,
       reverseGeocode: geocode || undefined,
       sunAtFirstPhoto: sunAtFirstPhoto || undefined,
     };
@@ -915,41 +907,27 @@ SIGNATURE: ${signature ? 'Captured' : 'Pending'}
               </div>
             </div>
 
-            {/* Auto-captured context — field tech sees what's been grabbed */}
-            {(weatherStatus !== 'idle' || sunAtFirstPhoto) && (
+            {/* Auto-captured context — field tech sees what was grabbed silently */}
+            {(geocode || sunAtFirstPhoto) && (
               <div className="mb-4 p-3 bg-slate-50 rounded-xl border border-slate-100">
                 <div className="flex items-center gap-2 mb-2">
                   <Sparkles className="w-3.5 h-3.5 text-brand-blue" />
                   <span className="text-[10px] font-black text-brand-blue uppercase tracking-widest">Auto-captured context</span>
-                  {weatherStatus === 'fetching' && <Loader2 className="w-3 h-3 animate-spin text-slate-400" />}
                 </div>
-                <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-700">
+                <div className="space-y-1 text-[11px] text-slate-700">
                   {geocode?.displayName && (
-                    <div className="col-span-2">
+                    <div>
                       <span className="font-bold text-slate-500">Verified address:</span> {geocode.displayName}
                     </div>
                   )}
-                  {weather?.current && (
-                    <>
-                      <div><span className="font-bold text-slate-500">Now:</span> {weather.current.tempC}°C, {weather.current.conditions}, RH {weather.current.humidity}%</div>
-                      <div><span className="font-bold text-slate-500">Wind:</span> {weather.current.windKph} km/h</div>
-                    </>
-                  )}
-                  {weather?.precip && (
-                    <div className="col-span-2">
-                      <span className="font-bold text-slate-500">Rainfall last 24/48/72h:</span> {weather.precip.last24hMm}/{weather.precip.last48hMm}/{weather.precip.last72hMm} mm
-                    </div>
-                  )}
                   {sunAtFirstPhoto && (
-                    <div className="col-span-2">
-                      <span className="font-bold text-slate-500">Sun:</span> {describeSun(sunAtFirstPhoto)}
+                    <div>
+                      <span className="font-bold text-slate-500">Sun at first photo:</span> {describeSun(sunAtFirstPhoto)}
                     </div>
                   )}
-                  {weather && !weather.configured && (
-                    <div className="col-span-2 text-amber-700 text-[10px]">
-                      ⚠ Weather API key not set in Netlify. Cowork will pull ECCC data instead for the report.
-                    </div>
-                  )}
+                  <div className="text-[10px] text-slate-400 italic">
+                    Weather (incl. rainfall history) is pulled by Cowork from ECCC at report time.
+                  </div>
                 </div>
               </div>
             )}

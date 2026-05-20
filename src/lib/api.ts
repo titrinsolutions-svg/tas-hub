@@ -368,39 +368,7 @@ export async function deleteFieldSubmission(id: string): Promise<boolean> {
   }
 }
 
-// ─── Weather + geocode (operational context from phone) ─────────────────────
-
-export interface WeatherSnapshot {
-  source: string;
-  configured: boolean;
-  lat: number;
-  lng: number;
-  current?: {
-    tempC?: number;
-    humidity?: number;
-    windKph?: number;
-    windDir?: number;
-    conditions?: string;
-    cloudPct?: number;
-    pressureHpa?: number;
-    fetchedAt: string;
-  };
-  precip?: {
-    last24hMm?: number;
-    last48hMm?: number;
-    last72hMm?: number;
-    hourlyMm: { time: string; mm: number }[];
-  };
-  note?: string;
-}
-
-export async function fetchWeather(lat: number, lng: number): Promise<WeatherSnapshot | null> {
-  try {
-    return await apiFetch(`/api/weather?lat=${lat}&lng=${lng}`);
-  } catch {
-    return null;
-  }
-}
+// ─── Reverse geocode (operational context from phone GPS) ──────────────────
 
 export interface GeocodeResult {
   source: string;

@@ -24,11 +24,6 @@
   status = 200
 
 [[redirects]]
-  from = "/api/weather"
-  to = "/.netlify/functions/weather"
-  status = 200
-
-[[redirects]]
   from = "/api/geocode"
   to = "/.netlify/functions/geocode"
   status = 200
