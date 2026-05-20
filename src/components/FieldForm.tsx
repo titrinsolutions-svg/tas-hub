@@ -85,20 +85,13 @@ interface TestPit {
   rainfallNote?: string;
 }
 
-// Site-level P-10 inputs. Tech-observable only (not photo-derivable later).
+// Site-level inputs for the field tech. KEPT INTENTIONALLY MINIMAL.
+// Everything else (slope, aspect, surrounding land use, vegetation, ponding,
+// current land use) is derived in Cowork from aerial imagery + DEM + photos.
+// The field tech is a body to dig and photograph properly.
 interface SiteInfo {
-  currentLandUse: '' | 'pasture' | 'crop' | 'fallow' | 'orchard' | 'developed' | 'mixed' | 'forested' | 'other';
-  vegetation: '' | 'grasses' | 'shrubs' | 'trees' | 'mixed' | 'cleared' | 'crop' | 'other';
-  slopeAspect: '' | 'N' | 'NE' | 'E' | 'SE' | 'S' | 'SW' | 'W' | 'NW' | 'level';
-  slopeGradient: '' | 'level' | 'gentle' | 'moderate' | 'strong' | 'steep';
-  pondingEvidence: boolean;
-  pondingNote: string;
-  adjacentN: string;
-  adjacentS: string;
-  adjacentE: string;
-  adjacentW: string;
-  assessmentAreaHa: string;  // string for input ergonomics; parsed to number on submit
-  generalNotes: string;
+  assessmentAreaHa: string;  // optional, for pit density warning only
+  generalNotes: string;       // free text — anything unusual that aerials won't show
 }
 
 const FIELD_DRAFT_KEY = 'tas_field_draft';
@@ -139,16 +132,6 @@ export function FieldForm({ role = 'field', projects = [] }: FieldFormProps) {
     generalNotes: ''
   });
   const [siteInfo, setSiteInfo] = useState<SiteInfo>(draft?.siteInfo || {
-    currentLandUse: '',
-    vegetation: '',
-    slopeAspect: '',
-    slopeGradient: '',
-    pondingEvidence: false,
-    pondingNote: '',
-    adjacentN: '',
-    adjacentS: '',
-    adjacentE: '',
-    adjacentW: '',
     assessmentAreaHa: '',
     generalNotes: '',
   });
@@ -183,21 +166,6 @@ export function FieldForm({ role = 'field', projects = [] }: FieldFormProps) {
     localStorage.setItem(FIELD_DRAFT_KEY, JSON.stringify(payload));
     setDraftSavedAt(payload.savedAt);
   }, [session, testPits, observations, siteInfo]);
-
-  // ── Phone compass: auto-detect slope aspect if available ──────────────────
-  useEffect(() => {
-    if (siteInfo.slopeAspect) return; // don't overwrite manual selection
-    const handler = (e: any) => {
-      const heading = e.webkitCompassHeading ?? (e.alpha != null ? 360 - e.alpha : null);
-      if (heading == null) return;
-      const dirs: SiteInfo['slopeAspect'][] = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-      const idx = Math.round(heading / 45) % 8;
-      setSiteInfo(prev => prev.slopeAspect ? prev : { ...prev, slopeAspect: dirs[idx] });
-      window.removeEventListener('deviceorientation', handler);
-    };
-    window.addEventListener('deviceorientation', handler);
-    return () => window.removeEventListener('deviceorientation', handler);
-  }, []);
 
   // ── Pit density calculation (P-10 §3.1 requires ≥1 pit per 1-5 ha) ───────
   const pitDensityWarning = (() => {
@@ -657,18 +625,6 @@ SIGNATURE: ${signature ? 'Captured' : 'Pending'}
     }));
 
     const sitePayload = {
-      currentLandUse: siteInfo.currentLandUse || undefined,
-      vegetation: siteInfo.vegetation || undefined,
-      slopeAspect: siteInfo.slopeAspect || undefined,
-      slopeGradient: siteInfo.slopeGradient || undefined,
-      pondingEvidence: siteInfo.pondingEvidence,
-      pondingNote: siteInfo.pondingNote || undefined,
-      adjacentLandUse: {
-        north: siteInfo.adjacentN || undefined,
-        south: siteInfo.adjacentS || undefined,
-        east: siteInfo.adjacentE || undefined,
-        west: siteInfo.adjacentW || undefined,
-      },
       assessmentAreaHa: parseFloat(siteInfo.assessmentAreaHa) || undefined,
       generalNotes: siteInfo.generalNotes || undefined,
     };
@@ -902,28 +858,30 @@ SIGNATURE: ${signature ? 'Captured' : 'Pending'}
             </div>
           </section>
 
-          {/* P-10 Site Info — raw evidence Cowork desktop uses to write the LCA report */}
-          <section className="bg-white rounded-3xl p-6 shadow-sm border border-amber-200/60">
-            <div className="flex items-center gap-3 mb-1">
+          {/* Optional: assessment area for pit density check + free-form site notes.
+              Everything else (slope, aspect, vegetation, surrounding land uses, ponding)
+              is derived in Cowork from aerials + DEM + photos. */}
+          <section className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+            <div className="flex items-center gap-3 mb-4">
               <div className="p-2 bg-amber-50 rounded-xl text-amber-700">
                 <Info className="w-5 h-5" />
               </div>
               <div>
-                <h2 className="text-lg font-bold text-brand-blue">ALC P-10 Site Info</h2>
-                <p className="text-[11px] font-medium text-slate-500">Raw site observations. Deep analysis happens in Claude Cowork at home.</p>
+                <h2 className="text-lg font-bold text-brand-blue">Site (optional)</h2>
+                <p className="text-[11px] font-medium text-slate-500">Slope, vegetation, surrounding land uses are derived in Cowork from aerials. Only fill what aerials can't see.</p>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Assessment Area (ha)</label>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Assessment Area (ha) — optional</label>
                 <input
                   type="number"
                   step="0.01"
                   value={siteInfo.assessmentAreaHa}
                   onChange={e => setSiteInfo({ ...siteInfo, assessmentAreaHa: e.target.value })}
                   className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-brand-green"
-                  placeholder="e.g. 2.5"
+                  placeholder="leave blank to use parcel area"
                 />
                 {pitDensityWarning && (
                   <p className={cn(
@@ -936,127 +894,12 @@ SIGNATURE: ${signature ? 'Captured' : 'Pending'}
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Current Land Use</label>
-                <select
-                  value={siteInfo.currentLandUse}
-                  onChange={e => setSiteInfo({ ...siteInfo, currentLandUse: e.target.value as SiteInfo['currentLandUse'] })}
-                  className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-brand-green"
-                >
-                  <option value="">— Pick —</option>
-                  <option value="pasture">Pasture</option>
-                  <option value="crop">Crop</option>
-                  <option value="fallow">Fallow</option>
-                  <option value="orchard">Orchard / Berries</option>
-                  <option value="developed">Developed</option>
-                  <option value="mixed">Mixed</option>
-                  <option value="forested">Forested</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Vegetation</label>
-                <select
-                  value={siteInfo.vegetation}
-                  onChange={e => setSiteInfo({ ...siteInfo, vegetation: e.target.value as SiteInfo['vegetation'] })}
-                  className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-brand-green"
-                >
-                  <option value="">— Pick —</option>
-                  <option value="grasses">Grasses</option>
-                  <option value="shrubs">Shrubs</option>
-                  <option value="trees">Trees</option>
-                  <option value="mixed">Mixed</option>
-                  <option value="cleared">Cleared</option>
-                  <option value="crop">Active crop</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Slope Aspect</label>
-                <select
-                  value={siteInfo.slopeAspect}
-                  onChange={e => setSiteInfo({ ...siteInfo, slopeAspect: e.target.value as SiteInfo['slopeAspect'] })}
-                  className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-brand-green"
-                >
-                  <option value="">— Auto-detected when on site —</option>
-                  <option value="level">Level (no aspect)</option>
-                  <option value="N">N</option>
-                  <option value="NE">NE</option>
-                  <option value="E">E</option>
-                  <option value="SE">SE</option>
-                  <option value="S">S</option>
-                  <option value="SW">SW</option>
-                  <option value="W">W</option>
-                  <option value="NW">NW</option>
-                </select>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Slope Gradient</label>
-                <select
-                  value={siteInfo.slopeGradient}
-                  onChange={e => setSiteInfo({ ...siteInfo, slopeGradient: e.target.value as SiteInfo['slopeGradient'] })}
-                  className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-brand-green"
-                >
-                  <option value="">— Pick —</option>
-                  <option value="level">Level (&lt;1%)</option>
-                  <option value="gentle">Gentle (1-5%)</option>
-                  <option value="moderate">Moderate (5-15%)</option>
-                  <option value="strong">Strong (15-30%)</option>
-                  <option value="steep">Steep (&gt;30%)</option>
-                </select>
-              </div>
-
-              <div className="space-y-1.5 md:col-span-2">
-                <label className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">
-                  <input
-                    type="checkbox"
-                    checked={siteInfo.pondingEvidence}
-                    onChange={e => setSiteInfo({ ...siteInfo, pondingEvidence: e.target.checked })}
-                    className="w-4 h-4 accent-brand-blue"
-                  />
-                  Evidence of ponding / surface drainage issues
-                </label>
-                {siteInfo.pondingEvidence && (
-                  <input
-                    type="text"
-                    value={siteInfo.pondingNote}
-                    onChange={e => setSiteInfo({ ...siteInfo, pondingNote: e.target.value })}
-                    placeholder="Where? Persistent or seasonal?"
-                    className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-brand-green"
-                  />
-                )}
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1 block mb-2">Adjacent Land Use (4 directions)</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(['N', 'S', 'E', 'W'] as const).map(d => {
-                    const key = (`adjacent${d}`) as 'adjacentN' | 'adjacentS' | 'adjacentE' | 'adjacentW';
-                    return (
-                      <div key={d} className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2">
-                        <span className="text-[10px] font-black text-brand-blue uppercase w-6 text-center">{d}</span>
-                        <input
-                          type="text"
-                          value={siteInfo[key]}
-                          onChange={e => setSiteInfo({ ...siteInfo, [key]: e.target.value })}
-                          placeholder={`Land use to the ${d.toLowerCase()}`}
-                          className="flex-1 bg-transparent border-none text-sm focus:ring-0 focus:outline-none"
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="md:col-span-2 space-y-1.5">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Other site observations</label>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Anything Cowork should know (optional)</label>
                 <textarea
                   value={siteInfo.generalNotes}
                   onChange={e => setSiteInfo({ ...siteInfo, generalNotes: e.target.value })}
-                  placeholder="Anything else Tish would want to know? Free text."
-                  className="w-full h-20 px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-brand-green resize-none"
+                  placeholder="e.g. previous fill on east half; owner mentioned a tile drain at 80 cm"
+                  className="w-full h-[58px] px-4 py-2.5 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-brand-green resize-none"
                 />
               </div>
             </div>

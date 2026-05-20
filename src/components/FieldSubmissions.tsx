@@ -33,16 +33,41 @@ Site: ${s.siteAddress}${s.projectName ? `\nProject: ${s.projectName}` : ''}
 Pull full submission: GET ${base}?id=${s.id}
   (use the same x-api-key as the hub frontend; same Netlify Blobs back-end)
 
-Run the full LCA P-10 pipeline using Opus 4.7:
-1. Hydrate property context with property_research.py (PMBC, ALR, BC Soil Survey)
-2. SIFT manual lookup — confirm/revise the provincial soil mapping for the parcel coordinates
-3. Climate normals — nearest active Env Canada station, 1991-2020 normals
-4. Prior reports — search TAS Reference Library + Gmail for prior agrology reports on this PID/address
-5. Deep photo analysis (per pit profile photo) — horizon detection, Munsell, mottling first-depth, gleying depth, CF%, structure, consistence, rooting depth, drainage class derivation
-6. Cross-reference photo evidence with SIFT + prior reports (reconcile per report-lessons.md May 14)
-7. Build the soil-pit table + climate table + drainage register
-8. Draft the LCA report using tas-report-writer skill, ALC P-10 spec
-9. Flag any drainage prediction-verb violations before finalizing
+The field tech captured the minimum that requires being on-site: photos with tape,
+GPS, pit base depth, water table presence + depth, rooting depth, hours since rain,
+and any anomaly notes. Everything else is YOUR job to derive.
+
+== Derive from aerials + DEM + Google Earth + BC iMap ==
+- Slope aspect (DEM)
+- Slope gradient % (DEM, to 0.1°)
+- Surrounding land uses N/S/E/W (aerial + cadastre)
+- Current land use on parcel (aerial; latest available imagery)
+- Vegetation type (aerial + photos)
+- Ponding evidence (satellite time-series — look for persistent wet pixels across seasons)
+- Assessment area (PMBC parcel polygon unless field tech specified subset)
+- Adjacent water bodies, ditches, roads (aerial)
+
+== Derive from photo analysis (Opus vision per pit profile photo) ==
+- Horizon sequence (designators, depth ranges)
+- Per-horizon Munsell, texture, CF%, structure, consistence
+- Mottling presence + first-depth + colour
+- Gleying presence + depth + colour
+- Drainage class (Canadian System of Soil Classification, derived from morphology + water table)
+- Photo quality assessment (was the tape visible? Image well-lit? Full pit face shown?)
+
+== Derive from APIs + research ==
+- PMBC parcel + ALR status (property_research.py)
+- BC Soil Survey provincial mapping (property_research.py)
+- SIFT manual lookup — confirm/revise the provincial soil polygons for the GPS coords
+- Climate normals 1991-2020 — nearest active Env Canada station, name + ID + distance
+- Prior reports on this PID/address — search TAS Reference Library + Gmail + Drive
+
+== Synthesis ==
+- Cross-reference photo evidence with SIFT + prior reports (reconcile per report-lessons.md May 14)
+- Build soil-pit table, climate table, drainage register
+- Draft via tas-report-writer skill, ALC P-10 spec
+- Run prediction-verb linter on drainage section (no "will resolve / will drain / is adequate")
+- LCA Class + subclass — your call as the agrologist (after photo + SIFT + climate inputs)
 
 Stop and ask Tish before sealing.`;
 }
