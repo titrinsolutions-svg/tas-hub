@@ -632,44 +632,60 @@ export function FieldForm({ role = 'field', projects = [] }: FieldFormProps) {
     }
   };
 
+  // captureMode says which section initiated the camera (so we know where the
+  // photo belongs when it comes back). Single-step capture: button → camera →
+  // photo lands in the right section automatically.
+  const [captureMode, setCaptureMode] = useState<'pit' | 'overview' | null>(null);
+
+  const startCapture = (mode: 'pit' | 'overview') => {
+    setCaptureMode(mode);
+    setIsCapturing(true);
+    // small delay so GPS effect kicks off before camera opens
+    setTimeout(() => fileInputRef.current?.click(), 0);
+  };
+
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const photoId = Math.random().toString(36).substr(2, 9);
-        const base64Data = reader.result as string;
-        const newPhoto: PhotoData = {
-          id: photoId,
-          url: base64Data,
-          timestamp: new Date().toLocaleString(),
-          gps: currentGps || undefined,
-          heading: currentHeading || undefined,
-          weather: session.weather,
-          label: activePitId 
-            ? `Test Pit ${testPits.findIndex(p => p.id === activePitId) + 1}` 
-            : (photos.length === 0 ? 'Site Overview' : `Photo ${photos.length + 1}`)
-        };
-
-        if (activePitId) {
-          setTestPits(prev => prev.map(pit => pit.id === activePitId ? { ...pit, photo: newPhoto } : pit));
-          analyzeSoilImage(photoId, base64Data, true);
-          setActivePitId(null);
-        } else {
-          setPhotos([...photos, newPhoto]);
-          analyzeSoilImage(photoId, base64Data, false);
-        }
-        setIsCapturing(false);
-
-        // Auto-fetch weather + geocode + sun angle as soon as we have a GPS lock.
-        // This runs once per submission (idempotent — hydrateContextFromGps no-ops if
-        // we've already fetched). Field tech does NOTHING extra for this.
-        if (newPhoto.gps) {
-          hydrateContextFromGps(newPhoto.gps.lat, newPhoto.gps.lng);
-        }
-      };
-      reader.readAsDataURL(file);
+    if (!file || !captureMode) {
+      setIsCapturing(false);
+      setCaptureMode(null);
+      return;
     }
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const photoId = Math.random().toString(36).substr(2, 9);
+      const base64Data = reader.result as string;
+      const newPhoto: PhotoData = {
+        id: photoId,
+        url: base64Data,
+        timestamp: new Date().toLocaleString(),
+        gps: currentGps || undefined,
+        heading: currentHeading || undefined,
+        label: captureMode === 'pit'
+          ? `Test Pit ${testPits.length + 1}`
+          : (photos.length === 0 ? 'Site Overview' : `Site Overview ${photos.length + 1}`),
+      };
+
+      if (captureMode === 'pit') {
+        const newPit: TestPit = {
+          id: Math.random().toString(36).substr(2, 9),
+          notes: '',
+          photo: newPhoto,
+        };
+        setTestPits(prev => [...prev, newPit]);
+      } else {
+        setPhotos(prev => [...prev, newPhoto]);
+      }
+
+      setIsCapturing(false);
+      setCaptureMode(null);
+
+      if (newPhoto.gps) {
+        hydrateContextFromGps(newPhoto.gps.lat, newPhoto.gps.lng);
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
   };
 
   const addTestPit = () => {
@@ -765,74 +781,23 @@ export function FieldForm({ role = 'field', projects = [] }: FieldFormProps) {
   };
 
   return (
-    <div className="space-y-8 pb-24">
-      {/* Header Section */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+    <div className="space-y-6 pb-24 max-w-2xl mx-auto px-4">
+      {/* Title row */}
+      <div className="flex items-start justify-between gap-4 pt-2">
         <div>
-          <h1 className="text-3xl font-black text-brand-blue tracking-tight">Field Data Collection</h1>
-          <p className="text-slate-500 font-medium">Professional site assessment & soil logging</p>
-          {draftSavedAt && (
-            <p className="text-[10px] font-bold text-brand-green uppercase tracking-widest mt-1 flex items-center gap-1">
-              <CheckCircle2 className="w-3 h-3" />
-              Draft auto-saved {new Date(draftSavedAt).toLocaleTimeString('en-CA', { hour: 'numeric', minute: '2-digit' })}
-            </p>
-          )}
+          <h1 className="text-2xl font-black text-brand-blue tracking-tight">Field Visit</h1>
+          <p className="text-slate-500 font-medium text-sm">
+            Take photos. Download each one. Upload to Claude at home.
+          </p>
         </div>
-        <div className="flex flex-col items-end gap-2">
-          <div className="flex gap-2">
-            <button
-              onClick={() => { clearForm(); clearDraft(); }}
-              className="flex items-center gap-2 px-4 py-2 text-slate-500 hover:text-red-600 font-bold text-sm transition-colors"
-            >
-              <RotateCcw className="w-4 h-4" />
-              Reset
-            </button>
-            <button
-              onClick={submitToAdmin}
-              disabled={submitState === 'submitting'}
-              className={cn(
-                "hidden md:flex items-center gap-2 px-4 py-2 text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold text-sm transition-all",
-                submitState === 'success' && "bg-brand-green/15 text-brand-green",
-                submitState === 'error' && "bg-red-100 text-red-700",
-                submitState === 'submitting' && "opacity-70 cursor-wait"
-              )}
-              title="Quiet backup — also stores in Netlify Blobs"
-            >
-              {submitState === 'submitting' ? (
-                <><Loader2 className="w-4 h-4 animate-spin" /> Submitting…</>
-              ) : submitState === 'success' ? (
-                <><CheckCircle2 className="w-4 h-4" /> Submitted</>
-              ) : submitState === 'error' ? (
-                <><AlertCircle className="w-4 h-4" /> Retry</>
-              ) : (
-                <><Save className="w-4 h-4" /> Submit (backup)</>
-              )}
-            </button>
-            <button
-              onClick={downloadAllPhotos}
-              disabled={!hasAnyPhoto || bulkDownloading}
-              className={cn(
-                "flex items-center gap-2 px-6 py-2 text-white rounded-xl font-bold shadow-lg transition-all",
-                hasAnyPhoto && !bulkDownloading
-                  ? "bg-brand-blue shadow-brand-blue/20 hover:scale-105"
-                  : "bg-slate-300 cursor-not-allowed"
-              )}
-              title="Save all photos to your gallery with watermarked metadata. Upload to Claude Cowork at home."
-            >
-              {bulkDownloading ? (
-                <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</>
-              ) : (
-                <><Download className="w-4 h-4" /> Download all photos</>
-              )}
-            </button>
-          </div>
-          {submitState === 'error' && submitError && (
-            <p className="text-xs text-red-600 font-medium max-w-xs text-right">{submitError}</p>
-          )}
-          {submitState === 'success' && (
-            <p className="text-xs text-brand-green font-medium">Tish will see this in the Projects view.</p>
-          )}
-        </div>
+        {(testPits.length > 0 || photos.length > 0) && (
+          <button
+            onClick={() => { clearForm(); clearDraft(); }}
+            className="text-[11px] text-slate-400 hover:text-red-500 font-bold uppercase tracking-widest whitespace-nowrap pt-2"
+          >
+            Reset
+          </button>
+        )}
       </div>
 
       {/* Live compass HUD — face your direction, see your heading, then snap.
@@ -938,283 +903,122 @@ export function FieldForm({ role = 'field', projects = [] }: FieldFormProps) {
             </div>
           </section>
 
-          {/* Optional: assessment area for pit density check + free-form site notes.
-              Everything else (slope, aspect, vegetation, surrounding land uses, ponding)
-              is derived in Cowork from aerials + DEM + photos. */}
-          <section className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-amber-50 rounded-xl text-amber-700">
-                <Info className="w-5 h-5" />
-              </div>
-              <div>
-                <h2 className="text-lg font-bold text-brand-blue">Site (optional)</h2>
-                <p className="text-[11px] font-medium text-slate-500">Slope, vegetation, surrounding land uses are derived in Cowork from aerials. Only fill what aerials can't see.</p>
-              </div>
-            </div>
-
-            {/* Auto-captured context — field tech sees what was grabbed silently */}
-            {(geocode || sunAtFirstPhoto) && (
-              <div className="mb-4 p-3 bg-slate-50 rounded-xl border border-slate-100">
-                <div className="flex items-center gap-2 mb-2">
-                  <Sparkles className="w-3.5 h-3.5 text-brand-blue" />
-                  <span className="text-[10px] font-black text-brand-blue uppercase tracking-widest">Auto-captured context</span>
-                </div>
-                <div className="space-y-1 text-[11px] text-slate-700">
-                  {geocode?.displayName && (
-                    <div>
-                      <span className="font-bold text-slate-500">Verified address:</span> {geocode.displayName}
-                    </div>
-                  )}
-                  {sunAtFirstPhoto && (
-                    <div>
-                      <span className="font-bold text-slate-500">Sun at first photo:</span> {describeSun(sunAtFirstPhoto)}
-                    </div>
-                  )}
-                  <div className="text-[10px] text-slate-400 italic">
-                    Weather (incl. rainfall history) is pulled by Cowork from ECCC at report time.
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Anything Cowork should know? (optional)</label>
-              <textarea
-                value={siteInfo.generalNotes}
-                onChange={e => setSiteInfo({ ...siteInfo, generalNotes: e.target.value })}
-                placeholder="e.g. previous fill on east half; owner mentioned a tile drain at 80 cm; smelled peaty"
-                className="w-full h-20 px-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-brand-green resize-none mt-2"
-              />
-            </div>
-          </section>
-
-          {/* Photo Documentation */}
-          <section className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-brand-blue/5 rounded-xl text-brand-blue">
-                  <ImageIcon className="w-5 h-5" />
-                </div>
-                <h2 className="text-lg font-bold text-brand-blue">Site Overview Photos</h2>
-              </div>
+          {/* Site Overview Photos */}
+          <section className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 space-y-4">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-base font-black text-brand-blue">Site Overview Photos</h2>
               <button
-                onClick={() => {
-                  setIsCapturing(true);
-                  fileInputRef.current?.click();
-                }}
-                className="flex items-center gap-2 px-4 py-2 bg-brand-green/10 text-brand-green rounded-xl font-bold text-sm hover:bg-brand-green/20 transition-colors"
+                onClick={() => startCapture('overview')}
+                disabled={isCapturing}
+                className="flex items-center gap-2 px-4 py-2.5 bg-brand-blue text-white rounded-xl font-bold text-sm shadow-md hover:bg-brand-blue/90 disabled:opacity-50 transition-all"
               >
                 <Camera className="w-4 h-4" />
-                Capture Photo
+                Take Photo
               </button>
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                onChange={handlePhotoUpload} 
-                accept="image/*" 
-                capture="environment"
-                className="hidden"
-              />
-            </div>
-
-            {/* Tip for the field tech — encourages site overview shots */}
-            <div className="mb-4 p-3 bg-brand-blue/5 rounded-xl border border-brand-blue/10">
-              <p className="text-[11px] text-slate-600 leading-relaxed">
-                <span className="font-black text-brand-blue uppercase tracking-wider text-[10px]">Tip · Before digging:</span>{' '}
-                Take 2-3 overview shots showing the landscape + surrounding land. Then one shot per direction (N/S/E/W) if useful. Capture any visible drainage features (ditches, low spots, wet patches). Cowork uses these to ground-truth aerials and detect surface drainage Opus can't see from above.
-              </p>
             </div>
 
             {photos.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-slate-100 rounded-2xl bg-slate-50/50">
-                <ImageIcon className="w-12 h-12 text-slate-200 mb-3" />
-                <p className="text-slate-400 font-medium text-sm">No site photos yet — take 2-3 to start</p>
-              </div>
+              <p className="text-center text-slate-400 text-xs py-8 border-2 border-dashed border-slate-100 rounded-xl">
+                Tap "Take Photo" for landscape shots of the site + surroundings
+              </p>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
-                {photos.map((photo) => (
-                  <div key={photo.id} className="group relative bg-white rounded-3xl overflow-hidden border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col">
-                    <div className="relative h-64 overflow-hidden bg-slate-100">
-                      <img src={photo.url} alt={photo.label} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
-                      
-                      <div className="absolute top-4 right-4 flex gap-2">
+              <div className="space-y-3">
+                  {photos.map(photo => (
+                    <div key={photo.id} className="rounded-2xl overflow-hidden border border-slate-200 bg-slate-50">
+                      <div className="flex items-center justify-between px-4 py-2 bg-white border-b border-slate-100">
+                        <span className="text-[11px] font-black text-brand-blue uppercase tracking-widest">{photo.label}</span>
                         <button
                           onClick={() => setPhotos(photos.filter(p => p.id !== photo.id))}
-                          className="p-2.5 bg-white/90 backdrop-blur-md text-red-500 rounded-xl shadow-lg hover:bg-red-50 transition-all"
-                          title="Delete this photo"
+                          className="p-1 text-slate-400 hover:text-red-500"
+                          title="Delete"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
-                      {savedPhotoKeys.has(siteSaveKey(photo.id)) && (
-                        <div className="absolute top-4 left-4 px-3 py-1.5 bg-brand-green/90 backdrop-blur-md text-white rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 shadow-lg">
-                          <CheckCircle2 className="w-3 h-3" /> Saved
-                        </div>
-                      )}
+                      <img src={photo.url} alt={photo.label} className="w-full max-h-80 object-cover" />
+                      <div className="p-3">
+                        {(() => {
+                          const saved = savedPhotoKeys.has(siteSaveKey(photo.id));
+                          return (
+                            <button
+                              onClick={() => saveSitePhoto(photo)}
+                              className={cn(
+                                "w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm transition-all",
+                                saved
+                                  ? "bg-brand-green/15 text-brand-green border border-brand-green/30"
+                                  : "bg-brand-blue text-white shadow-md hover:scale-[1.01]"
+                              )}
+                            >
+                              {saved ? (
+                                <><CheckCircle2 className="w-4 h-4" /> Downloaded ✓</>
+                              ) : (
+                                <><Download className="w-4 h-4" /> Download Photo</>
+                              )}
+                            </button>
+                          );
+                        })()}
+                      </div>
                     </div>
+                  ))}
+                </div>
+              )}
+          </section>
 
-                    {/* Save-to-gallery button — primary handoff path */}
-                    <div className="px-5 pt-4">
+          {/* Test Pit Photos — one-step capture, prominent download per photo */}
+          <section className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 space-y-4">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-base font-black text-brand-blue">Test Pit Photos</h2>
+              <button
+                onClick={() => startCapture('pit')}
+                disabled={isCapturing}
+                className="flex items-center gap-2 px-4 py-2.5 bg-brand-blue text-white rounded-xl font-bold text-sm shadow-md hover:bg-brand-blue/90 disabled:opacity-50 transition-all"
+              >
+                <Camera className="w-4 h-4" />
+                Take Photo
+              </button>
+            </div>
+
+            {testPits.length === 0 ? (
+              <p className="text-center text-slate-400 text-xs py-8 border-2 border-dashed border-slate-100 rounded-xl">
+                Tap "Take Photo" to capture a soil pit with tape measure visible
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {testPits.map((pit, index) => pit.photo && (
+                  <div key={pit.id} className="rounded-2xl overflow-hidden border border-slate-200 bg-slate-50">
+                    <div className="flex items-center justify-between px-4 py-2 bg-white border-b border-slate-100">
+                      <span className="text-[11px] font-black text-brand-blue uppercase tracking-widest">Pit {index + 1}</span>
+                      <button
+                        onClick={() => removeTestPit(pit.id)}
+                        className="p-1 text-slate-400 hover:text-red-500"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <img src={pit.photo.url} alt={`Pit ${index + 1}`} className="w-full max-h-80 object-cover" />
+                    <div className="p-3">
                       {(() => {
-                        const saved = savedPhotoKeys.has(siteSaveKey(photo.id));
+                        const key = pitSaveKey(pit);
+                        const saved = key ? savedPhotoKeys.has(key) : false;
                         return (
                           <button
-                            onClick={() => saveSitePhoto(photo)}
+                            onClick={() => savePitPhoto(pit, index)}
                             className={cn(
-                              "w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm transition-all",
+                              "w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm transition-all",
                               saved
                                 ? "bg-brand-green/15 text-brand-green border border-brand-green/30"
                                 : "bg-brand-blue text-white shadow-md hover:scale-[1.01]"
                             )}
                           >
                             {saved ? (
-                              <><CheckCircle2 className="w-4 h-4" /> Saved to gallery ✓</>
+                              <><CheckCircle2 className="w-4 h-4" /> Downloaded ✓</>
                             ) : (
-                              <><Download className="w-4 h-4" /> Save photo to gallery</>
+                              <><Download className="w-4 h-4" /> Download Photo</>
                             )}
                           </button>
                         );
                       })()}
-                    </div>
-
-                    {/* Professional Data Card (Underneath Photo) */}
-                    <div className="p-5 space-y-4 bg-slate-50/50">
-                      <div className="flex justify-between items-start">
-                        <div className="flex items-center gap-2">
-                          <img src={LOGOS.color} alt="TAS" className="h-6 w-auto" />
-                          <div className="h-4 w-[1px] bg-slate-200" />
-                          <div className="flex flex-col">
-                            <span className="text-[10px] font-black uppercase tracking-widest text-brand-blue leading-none">Titrin AgriSoil</span>
-                            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">Professional Site Record</span>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-[10px] font-bold text-slate-600">{photo.timestamp}</div>
-                          <div className="text-[9px] font-black text-brand-green uppercase tracking-widest mt-0.5">{session.fileNumber}</div>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-2">
-                        <div className="bg-white p-2 rounded-xl border border-slate-100 shadow-sm">
-                          <div className="flex items-center gap-1.5 mb-1">
-                            <MapPin className="w-3 h-3 text-brand-green" />
-                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">GPS</span>
-                          </div>
-                          <div className="text-[10px] font-bold text-brand-blue truncate">
-                            {photo.gps ? `${photo.gps.lat.toFixed(4)}, ${photo.gps.lng.toFixed(4)}` : 'N/A'}
-                          </div>
-                        </div>
-                        <div className="bg-white p-2 rounded-xl border border-slate-100 shadow-sm">
-                          <div className="flex items-center gap-1.5 mb-1">
-                            <Compass className="w-3 h-3 text-brand-gold" />
-                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Heading</span>
-                          </div>
-                          <div className="text-[10px] font-bold text-brand-blue">
-                            {photo.heading !== undefined ? `${Math.round(photo.heading)}°` : 'N/A'}
-                          </div>
-                        </div>
-                        <div className="bg-white p-2 rounded-xl border border-slate-100 shadow-sm">
-                          <div className="flex items-center gap-1.5 mb-1">
-                            {photo.weather === 'Sunny' && <Sun className="w-3 h-3 text-yellow-500" />}
-                            {photo.weather === 'Cloudy' && <Cloud className="w-3 h-3 text-slate-400" />}
-                            {photo.weather === 'Rainy' && <CloudRain className="w-3 h-3 text-blue-400" />}
-                            {photo.weather === 'Windy' && <Wind className="w-3 h-3 text-slate-400" />}
-                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Weather</span>
-                          </div>
-                          <div className="text-[10px] font-bold text-brand-blue">{photo.weather || 'N/A'}</div>
-                        </div>
-                      </div>
-
-                      {/* Soil Data Section */}
-                      <div className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Sparkles className="w-3 h-3 text-brand-green" />
-                            <span className="text-[10px] font-black text-brand-green uppercase tracking-widest">Soil Classification</span>
-                          </div>
-                          {isAnalyzing === photo.id && <Loader2 className="w-3 h-3 text-brand-green animate-spin" />}
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1">
-                            <label className="text-[8px] font-bold text-slate-400 uppercase tracking-widest ml-1">LCA Class</label>
-                            <select 
-                              value={photo.lcaClass || 'Class 1'}
-                              onChange={(e) => setPhotos(photos.map(p => p.id === photo.id ? {...p, lcaClass: e.target.value} : p))}
-                              className="w-full px-2 py-1.5 bg-slate-50 border-none rounded-lg text-[10px] font-bold text-brand-blue focus:ring-1 focus:ring-brand-green transition-all"
-                            >
-                              {LCA_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-[8px] font-bold text-slate-400 uppercase tracking-widest ml-1">Texture</label>
-                            <select 
-                              value={photo.aiAnalysis?.texture || 'Loam'}
-                              onChange={(e) => setPhotos(photos.map(p => p.id === photo.id ? {...p, aiAnalysis: {...p.aiAnalysis, texture: e.target.value}} : p))}
-                              className="w-full px-2 py-1.5 bg-slate-50 border-none rounded-lg text-[10px] font-bold text-brand-blue focus:ring-1 focus:ring-brand-green transition-all"
-                            >
-                              {SOIL_TEXTURES.map(t => <option key={t} value={t}>{t}</option>)}
-                            </select>
-                          </div>
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="text-[8px] font-bold text-slate-400 uppercase tracking-widest ml-1">Munsell Color</label>
-                          <input 
-                            type="text" 
-                            value={photo.aiAnalysis?.munsell || ''}
-                            onChange={(e) => setPhotos(photos.map(p => p.id === photo.id ? {...p, aiAnalysis: {...p.aiAnalysis, munsell: e.target.value}} : p))}
-                            className="w-full px-2 py-1.5 bg-slate-50 border-none rounded-lg text-[10px] font-bold text-brand-blue focus:ring-1 focus:ring-brand-green transition-all"
-                            placeholder="e.g. 10YR 4/3"
-                          />
-                        </div>
-
-                        {photo.siftData && (
-                          <div className="pt-2 border-t border-slate-100">
-                            <div className="flex items-center gap-1.5 mb-1">
-                              <Info className="w-2.5 h-2.5 text-brand-gold" />
-                              <span className="text-[8px] font-black text-brand-gold uppercase tracking-widest">SIFT Mapping</span>
-                            </div>
-                            <p className="text-[9px] font-medium text-slate-500 leading-tight italic">
-                              {photo.siftData}
-                            </p>
-                          </div>
-                        )}
-
-                        {(photo.elevation || photo.topography) && (
-                          <div className="pt-2 border-t border-slate-100">
-                            <div className="flex gap-4 mb-1">
-                              {photo.elevation && (
-                                <div className="flex-1">
-                                  <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Elevation</div>
-                                  <div className="text-[10px] font-bold text-brand-blue">{photo.elevation}</div>
-                                </div>
-                              )}
-                              {photo.topography && (
-                                <div className="flex-[2]">
-                                  <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Topography</div>
-                                  <div className="text-[10px] font-bold text-brand-blue truncate" title={photo.topography}>{photo.topography}</div>
-                                </div>
-                              )}
-                            </div>
-                            {photo.elevationSource && (
-                              <div className="text-[7px] text-slate-400 italic">
-                                Source: {photo.elevationSource}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="pt-2">
-                        <input 
-                          type="text" 
-                          value={photo.label}
-                          onChange={(e) => setPhotos(photos.map(p => p.id === photo.id ? {...p, label: e.target.value} : p))}
-                          className="w-full bg-transparent border-none p-0 font-black text-sm text-brand-blue focus:ring-0 uppercase tracking-tight placeholder:text-slate-300"
-                          placeholder="PHOTO LABEL"
-                        />
-                      </div>
                     </div>
                   </div>
                 ))}
@@ -1222,238 +1026,19 @@ export function FieldForm({ role = 'field', projects = [] }: FieldFormProps) {
             )}
           </section>
 
-          {/* Test Pits & Soil Logs */}
-          <section className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-brand-blue/5 rounded-xl text-brand-blue">
-                  <Leaf className="w-5 h-5" />
-                </div>
-                <h2 className="text-lg font-bold text-brand-blue">Soil Logs & Test Pits</h2>
-              </div>
-              <button 
-                onClick={addTestPit}
-                className="flex items-center gap-2 px-4 py-2 bg-brand-blue text-white rounded-xl font-bold text-sm hover:bg-brand-blue/90 transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                Add Pit
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {testPits.map((pit, index) => (
-                <div key={pit.id} className="bg-slate-50 rounded-2xl p-5 border border-slate-100">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-black text-brand-blue uppercase tracking-wider text-xs">Test Pit #{index + 1}</h3>
-                    <button onClick={() => removeTestPit(pit.id)} className="text-slate-300 hover:text-red-500">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                  
-                  <div className="space-y-4">
-                    {/* Test Pit Photo Section — primary deliverable */}
-                    <div className="space-y-3">
-                      {pit.photo ? (
-                        <>
-                          <div className="relative rounded-2xl overflow-hidden border border-slate-200 group">
-                            <img src={pit.photo.url} alt={`Pit ${index + 1}`} className="w-full h-48 object-cover" />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
-                              <button
-                                onClick={() => updateTestPit(pit.id, 'photo', undefined)}
-                                className="p-3 bg-white text-red-500 rounded-xl font-bold shadow-lg hover:scale-110 transition-transform"
-                                title="Delete this photo"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                            <div className="absolute bottom-3 left-3 flex flex-col gap-1">
-                              <div className="px-3 py-1 bg-brand-blue/80 backdrop-blur-md text-white rounded-lg text-[10px] font-bold uppercase tracking-widest">
-                                Pit #{index + 1} Photo
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Save-to-gallery primary action — survives crashes */}
-                          {(() => {
-                            const key = pitSaveKey(pit);
-                            const saved = key ? savedPhotoKeys.has(key) : false;
-                            return (
-                              <button
-                                onClick={() => savePitPhoto(pit, index)}
-                                className={cn(
-                                  "w-full flex items-center justify-center gap-2 py-3 rounded-2xl font-bold text-sm transition-all",
-                                  saved
-                                    ? "bg-brand-green/15 text-brand-green border border-brand-green/30"
-                                    : "bg-brand-blue text-white shadow-lg shadow-brand-blue/20 hover:scale-[1.01]"
-                                )}
-                              >
-                                {saved ? (
-                                  <>
-                                    <CheckCircle2 className="w-4 h-4" />
-                                    Saved to gallery ✓ (re-save if you edit any field above)
-                                  </>
-                                ) : (
-                                  <>
-                                    <Download className="w-4 h-4" />
-                                    Save photo to gallery
-                                  </>
-                                )}
-                              </button>
-                            );
-                          })()}
-                        </>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            setActivePitId(pit.id);
-                            setIsCapturing(true);
-                            fileInputRef.current?.click();
-                          }}
-                          className="w-full py-8 border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center gap-2 text-slate-400 hover:border-brand-blue hover:text-brand-blue transition-all"
-                        >
-                          <Camera className="w-8 h-8" />
-                          <span className="text-xs font-bold uppercase tracking-widest">Capture Pit Photo</span>
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Optional one-line note per pit (only if something unusual) */}
-                    {pit.photo && (
-                      <input
-                        type="text"
-                        value={pit.notes}
-                        onChange={e => updateTestPit(pit.id, 'notes', e.target.value)}
-                        placeholder="Optional: anything unusual? (smell, fill, tile drain heard)"
-                        className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue transition-all"
-                      />
-                    )}
-                  </div>
-                </div>
-              ))}
-              {testPits.length === 0 && (
-                <div className="text-center py-8 text-slate-400 text-sm font-medium">
-                  No test pits logged yet.
-                </div>
-              )}
-            </div>
-          </section>
+          {/* Hidden file input — single shared input, captureMode tells handler where the photo goes */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={handlePhotoUpload}
+          />
         </div>
 
       </div>
 
-      {/* Soil Texture Guide Modal */}
-      <AnimatePresence>
-        {showSoilGuide && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-brand-blue/40 backdrop-blur-sm">
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl border border-slate-100"
-            >
-              <div className="flex items-center gap-3 mb-6">
-                <div className="p-2 bg-brand-green/10 rounded-xl text-brand-green">
-                  <Info className="w-5 h-5" />
-                </div>
-                <h2 className="text-xl font-black text-brand-blue tracking-tight">Soil Texture Guide</h2>
-              </div>
-              
-              <div className="space-y-4 text-sm text-slate-600 font-medium">
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                  <h4 className="text-brand-blue font-bold mb-1">Sand</h4>
-                  <p className="text-xs">Gritty, does not form a ball when moist.</p>
-                </div>
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                  <h4 className="text-brand-blue font-bold mb-1">Loam</h4>
-                  <p className="text-xs">Balanced mix. Forms a ball that breaks easily.</p>
-                </div>
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                  <h4 className="text-brand-blue font-bold mb-1">Clay</h4>
-                  <p className="text-xs">Sticky, forms long ribbons when squeezed.</p>
-                </div>
-              </div>
-
-              <button 
-                onClick={() => setShowSoilGuide(false)}
-                className="w-full mt-8 py-4 bg-brand-blue text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-brand-blue/20"
-              >
-                Got it
-              </button>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-      {/* LCA Guide Modal */}
-      <AnimatePresence>
-        {showLCAGuide && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-brand-blue/40 backdrop-blur-sm">
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl p-8 max-w-2xl w-full shadow-2xl border border-slate-100 overflow-y-auto max-h-[90vh]"
-            >
-              <div className="flex items-center gap-3 mb-6">
-                <div className="p-2 bg-brand-gold/10 rounded-xl text-brand-gold">
-                  <Compass className="w-5 h-5" />
-                </div>
-                <h2 className="text-xl font-black text-brand-blue tracking-tight">Land Capability Assessment (LCA) Guide</h2>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm text-slate-600 font-medium">
-                <div className="space-y-3">
-                  <h3 className="text-brand-blue font-black uppercase tracking-widest text-xs">Capability Classes</h3>
-                  <div className="space-y-2">
-                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                      <span className="font-bold text-brand-green">Class 1:</span> No significant limitations.
-                    </div>
-                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                      <span className="font-bold text-brand-green">Class 2:</span> Moderate limitations.
-                    </div>
-                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                      <span className="font-bold text-brand-gold">Class 3:</span> Moderately severe limitations.
-                    </div>
-                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                      <span className="font-bold text-brand-gold">Class 4:</span> Severe limitations.
-                    </div>
-                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                      <span className="font-bold text-red-500">Class 5:</span> Very severe limitations (pasture only).
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="space-y-3">
-                  <h3 className="text-brand-blue font-black uppercase tracking-widest text-xs">Common Subclasses</h3>
-                  <div className="space-y-2">
-                    <div className="p-2 text-xs">
-                      <span className="font-bold">W:</span> Excess water / poor drainage.
-                    </div>
-                    <div className="p-2 text-xs">
-                      <span className="font-bold">T:</span> Topography / slope issues.
-                    </div>
-                    <div className="p-2 text-xs">
-                      <span className="font-bold">P:</span> Stoniness.
-                    </div>
-                    <div className="p-2 text-xs">
-                      <span className="font-bold">D:</span> Undesirable structure / permeability.
-                    </div>
-                    <div className="p-2 text-xs">
-                      <span className="font-bold">M:</span> Moisture deficiency / droughtiness.
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <button 
-                onClick={() => setShowLCAGuide(false)}
-                className="w-full mt-8 py-4 bg-brand-blue text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-brand-blue/20"
-              >
-                Close Guide
-              </button>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }
