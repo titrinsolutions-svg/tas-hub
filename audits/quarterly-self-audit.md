@@ -9,8 +9,10 @@ A deep system audit modeled on `C:\Users\Tish\Desktop\TITRIN\Claude\SYSTEM-AUDIT
 
 ## Scope (run in order)
 
-### Phase 1 — Baseline: run the weekly check
-Execute `tas-hub/audits/weekly-health-check.md` first, but DO NOT write its output file. Use the results to populate the baseline section of the quarterly audit instead. This catches anything the weekly missed.
+### Phase 1 — Baseline: run the system health script
+Execute `C:/Users/Tish/Desktop/TITRIN/Claude/TAS - Tools/system_health.py` to capture the baseline of mechanical checks (git/backup/settings/verifiers/learning loops/deploy match). Capture its output for the quarterly audit's baseline section. This is the same fast check that runs on every session start, but here you're snapshotting it as part of the deeper quarterly review.
+
+Additionally: run `npx tsc --noEmit` and `npm run build` in `C:/Users/Tish/Downloads/tas-hub` (these aren't in the session-start script because they're too slow for every-session use — but they belong in the quarterly).
 
 ### Phase 2 — Cross-reference integrity (dispatch a subagent)
 
