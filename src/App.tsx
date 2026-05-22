@@ -78,7 +78,7 @@ export default function App() {
     alert('✓ Copied to clipboard — paste into Claude.');
   };
 
-  const FIELD_TABS = ['dashboard', 'projects', 'field'];
+  const FIELD_TABS = ['field'];
   const handleTabChange = (tab: string) => {
     if (!isAdmin && !FIELD_TABS.includes(tab)) return;
     setActiveTab(tab);

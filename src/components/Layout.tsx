@@ -55,8 +55,8 @@ export function Layout({
   const isAdmin = role === 'admin';
 
   const allNavItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, section: 'Overview', adminOnly: false },
-    { id: 'projects', label: 'Projects', icon: Briefcase, section: 'Overview', adminOnly: false },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, section: 'Overview', adminOnly: true },
+    { id: 'projects', label: 'Projects', icon: Briefcase, section: 'Overview', adminOnly: true },
     { id: 'invoices', label: 'Invoices', icon: Receipt, section: 'Overview', adminOnly: true },
     { id: 'notes', label: 'Notes for Claude', icon: FileText, section: 'Overview', adminOnly: true },
     { id: 'field', label: 'Field Form', icon: ClipboardList, section: 'Tools', adminOnly: false },
