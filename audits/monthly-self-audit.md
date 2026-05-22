@@ -28,9 +28,9 @@ Dispatch an Explore-type subagent with this prompt:
 - Read `Claude/memory/projects/active-projects.md` — any "active" project untouched 60+ days?
 - Compare `Scheduled/archive/` vs active `Scheduled/` — naming overlap (task moved but not removed from registrations)?
 
-## Phase 4 — Friction-pattern search via claude-mem
+## Phase 4 — Friction-pattern search via claude-mem (best-effort)
 
-**This is the new monthly value-add over the prior quarterly design.** Use the claude-mem MCP tools (`mcp__plugin_claude-mem_mcp-search__smart_search`, `mcp__plugin_claude-mem_mcp-search__timeline`, `mcp__plugin_claude-mem_mcp-search__search`) to look back across recent Claude sessions (Cowork + Code) for recurring patterns:
+Use the claude-mem MCP tools (`mcp__plugin_claude-mem_mcp-search__smart_search`, `mcp__plugin_claude-mem_mcp-search__timeline`, `mcp__plugin_claude-mem_mcp-search__search`) to look back across recent Claude sessions for recurring patterns:
 
 - Search for patterns like "Tish corrected", "Tish pushed back", "fixed manually", "had to do by hand", "wished I could", "couldn't do" — frustration signals
 - Search for any specific tool/skill names that appear repeatedly with negative context
@@ -41,6 +41,18 @@ For each recurring pattern (≥2 instances in 30 days), propose a candidate edit
 - "Drainage prediction-verb correction needed 4× in 30 days" → candidate: tighten the linter in verify_report.py or strengthen the rule in tas-report-writer prompt
 - "Manual download of Drive attachment 3×" → candidate: extend Gmail downloader to handle Drive-only links
 - "Same fee-proposal formatting fix 5×" → candidate: add a verify_quotation.py + extend the preflight hook
+
+**Best-effort caveat:** the claude-mem corpus may be too sparse to produce meaningful signal in early audits (this was the case at the first audit 2026-05-21 — every search variant returned roughly the same 13-18 observations from one April-13 cluster). If searches return little new signal beyond what the in-session capture mechanism already surfaced into CANDIDATE-EDITS.md, note this in the audit verdict ("claude-mem corpus immature; Phase 4 produced thin signal") and continue to Phase 4-Lite below. Re-evaluate Phase 4's load-bearing status once the corpus exceeds ~500 observations.
+
+## Phase 4-Lite — Recent feedback + lessons clustering (fallback signal source)
+
+When Phase 4 returns thin signal (likely in the first few months), supplement with these cheap reads of structured memory:
+
+1. **Recent feedback memory:** `ls -t Claude/memory/feedback/*.md | head -10` — what's been written or modified in the last 30 days? Sort by mtime; cluster by theme (drainage, branding, automation, etc.). Repeated themes = candidates.
+2. **Recent auto-memory entries:** read `C:/Users/Tish/.claude/projects/C--Users-Tish-Downloads-tas-hub/memory/MEMORY.md` and sort entries by their file's mtime. Multiple recent feedback-type entries on the same surface area = candidate to address structurally.
+3. **report-lessons.md and email-lessons.md:** check the most recent 5-10 entries each. If a lesson keeps getting reinforced (similar correction appearing multiple times), the rule probably belongs in code (a verifier check, a hook, a linter) rather than as a memory entry Claude must remember.
+
+Phase 4-Lite findings get the same treatment as Phase 4: propose candidate edits to CANDIDATE-EDITS.md with clear "first seen / reinforced" tracking.
 
 ## Phase 5 — Recent feedback-memory analysis
 
