@@ -3,6 +3,16 @@ import projectsData from './data/projects.json';
 
 const PROJECTS_FROM_JSON = projectsData as Project[];
 
+// =============================================================================
+// STATIC SEED DATA - not the live source of truth.
+// Project status here (and in ./data/projects.json) is a point-in-time seed that
+// can lag reality by weeks. The AUTHORITATIVE live status is Cowork's
+// active-projects.md (TITRIN/Claude/memory/projects/), updated each weekday
+// end-of-day and served at runtime via the Netlify Functions backend (GET /api/hub).
+// Do NOT rely on these constants for current retainer / payment / contact state.
+// (Wiring the portal to read /api/hub so it stops drifting is on the backlog.)
+// =============================================================================
+
 export const LOGOS = {
   white: '/logo-white.png',
   color: '/logo-color.png'
