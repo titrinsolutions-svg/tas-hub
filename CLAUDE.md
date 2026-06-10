@@ -13,7 +13,7 @@ For full identity, services, current active files, pricing, branding, scripts, m
 
 **Stack:** Vite 6 + React 19 + TypeScript + Tailwind 4 + Motion + Lucide. Optional Express backend on port 3000 proxies Firebase / Gmail / Ollama / Gemini calls.
 
-**Deploy (V2 — canonical):** Netlify — `tas-hub-titrin.netlify.app`. GitHub Actions auto-deploys on push to `main` (`titrinsolutions-svg/tas-hub`). **Backend is Netlify Functions in this same repo** at `netlify/functions/`, persisting via Netlify Blobs — see [project_backend.md memory](C:\Users\Tish\.claude\projects\C--Users-Tish-Downloads-tas-hub\memory\project_backend.md). The previously documented Render URL (`tas-hub-backend.onrender.com`) was never deployed and is obsolete. V1 on Cloudflare Pages is archived — do not propose deploy changes against it.
+**Deploy (V2 — canonical):** Netlify — `tas-hub-titrin.netlify.app`. Netlify auto-deploys on push to `main` (linked repo `titrinsolutions-svg/tas-hub`; build runs on Netlify per `netlify.toml` — there is no `.github/workflows/` in this repo). **Backend is Netlify Functions in this same repo** at `netlify/functions/`, persisting via Netlify Blobs — see [project_backend.md memory](C:\Users\Tish\.claude\projects\C--Users-Tish-Downloads-tas-hub\memory\project_backend.md). The previously documented Render URL (`tas-hub-backend.onrender.com`) was never deployed and is obsolete. V1 on Cloudflare Pages is archived — do not propose deploy changes against it.
 
 **Auth:** Dual-PIN. Admin (`VITE_ADMIN_PIN`, default `8474`) sees everything. Field (`VITE_FIELD_PIN`, default `8888`) gets dashboard + projects + field form only — money/AI/email stripped at the data layer in [`useAppData.ts`](src/hooks/useAppData.ts), not just hidden in UI.
 

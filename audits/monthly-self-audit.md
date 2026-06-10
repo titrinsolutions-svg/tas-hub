@@ -100,6 +100,14 @@ Sort the file: newest PROPOSED on top, then chronic-stalled, then APPLIED/REJECT
 - Are there new hooks/tools/skills not mentioned in ARCHITECTURE.md?
 - Are there documented behaviors (e.g. "tas-monthly-housekeeping audits CLAUDE.md bloat") that aren't actually happening?
 
+## Phase 9 — Parked-build triggers (external-platform watch)
+
+Some builds are deliberately PARKED until a platform capability ships. Re-check them here so a parked build gets picked up the month its trigger lands.
+
+- Read memory `reference_field_dispatcher_parked` + blueprint `tas-hub/docs/superpowers/specs/2026-06-02-field-dispatcher-design.md`, and pull its **"Build-it-when triggers"** list (currently the **field dispatcher**: project-scoped / multi-thread Dispatch, native task-decomposition / subagent fan-out in Dispatch or Cowork, persistent agents / "agent teams", scheduled autonomous agents or hooks in Cowork, Dispatch offline-resilience / wake-on-demand).
+- If web tools are available, scan recent **Anthropic release notes** (Claude Code + Cowork, last ~60 days) for any match. If web is unavailable, note "couldn't check — surface to Tish" and move on (best-effort, same caveat as Phase 4).
+- **If a trigger has fired:** flag it loudly in the audit output AND append to `active-projects.md` — `⚠️ [Monthly audit YYYY-MM-DD] Field-dispatcher trigger FIRED: <feature> shipped — ready to build, see blueprint`. Do NOT build it here (diagnostic only).
+
 ## Output: `SYSTEM-AUDIT-YYYY-MM-DD.md`
 
 Following the structure of `SYSTEM-AUDIT-2026-05-20.md`:
