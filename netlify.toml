@@ -1,6 +1,10 @@
 [build]
   command = "npm run build"
   publish = "dist"
+  # Skip the build (saves ~15 credits/deploy) when a push touches ONLY docs/audits/markdown —
+  # the 2026-06 usage_exceeded outage was 20 deploys x 15 credits, mostly docs-only pushes.
+  # Exit 0 = skip build; non-zero = build.
+  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- . ':(exclude)docs' ':(exclude)audits' ':(exclude)*.md' ':(exclude).superpowers'"
 
 [build.environment]
   NODE_VERSION = "22"
