@@ -1,10 +1,12 @@
 [build]
   command = "npm run build"
   publish = "dist"
-  # Skip the build (saves ~15 credits/deploy) when a push touches ONLY docs/audits/markdown —
-  # the 2026-06 usage_exceeded outage was 20 deploys x 15 credits, mostly docs-only pushes.
-  # Exit 0 = skip build; non-zero = build.
-  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- . ':(exclude)docs' ':(exclude)audits' ':(exclude)*.md' ':(exclude).superpowers'"
+  # Builds are OPT-IN (2026-06-11, Tish's call after the usage_exceeded suspension): automation pushes to
+  # this repo near-daily and each auto-build burned ~15 credits — 20 builds of an unchanged app ate the
+  # month. `exit 0` = ALWAYS skip CI builds; the live site keeps serving its last deploy. To actually ship
+  # app changes, deploy manually:  npx netlify deploy --build --prod   (or temporarily restore the previous
+  # diff-based ignore rule from git history: commit 68765f4).
+  ignore = "exit 0"
 
 [build.environment]
   NODE_VERSION = "22"

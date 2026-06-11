@@ -53,7 +53,7 @@ export function useAppData(role: UserRole | null = 'admin') {
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'saved' | 'offline'>('idle');
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Check backend on mount and load from Firebase if available
+  // Check backend on mount and load from Netlify Blobs if available
   useEffect(() => {
     (async () => {
       const healthy = await checkBackendHealth();
@@ -62,7 +62,7 @@ export function useAppData(role: UserRole | null = 'admin') {
       if (healthy) {
         const hubData = await loadHubData();
         if (hubData?.userEdits) {
-          // Firebase has newer data — merge with localStorage
+          // Backend (Netlify Blobs) has newer data — merge with localStorage
           const fbEdits = hubData.userEdits as UserEdits;
           const localEdits = (() => {
             try {

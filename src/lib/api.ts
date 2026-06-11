@@ -66,7 +66,7 @@ export async function checkAuthStatus(): Promise<{ authenticated: boolean; email
   }
 }
 
-// ─── Hub Data (Firebase persistence) ─────────────────────────────────────────
+// ─── Hub Data (Netlify Blobs persistence) ────────────────────────────────────
 
 export async function loadHubData(): Promise<Record<string, unknown> | null> {
   try {
