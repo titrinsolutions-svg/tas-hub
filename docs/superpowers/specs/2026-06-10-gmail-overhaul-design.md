@@ -126,7 +126,18 @@ SKILL edits land in canonical locations: scheduled tasks in `Documents\Claude\Sc
 - `@Drafted` max age (target: <2 days — would have shipped the Rav quote and the $48k chase list).
 - Morning-brief token cost (should drop once zNews skips the inbox).
 
-## 11. Decision log
+## 11. North-star alignment (added after VISION.md + HANDOFF-2026-06-10 review)
+
+Checked against the 9 VISION principles and this morning's fresh-eyes audit. Verdict: **advances the dream goal; no conflicts.** Specifics that now bind this design:
+
+- **Labels are a DERIVED, self-healing index — never a second source of truth** (principle 6). Project status truth = the tracker; ball-state truth = the live thread (who-holds-the-ball). The daily sweep re-derives `@Action`/`@Waiting` from the thread itself; labels never feed reports, invoices, or decisions directly — they only route attention. Drift is tolerated and self-corrects within a day.
+- **Antifragile guard (principle 5):** Phase 3 adds a doctor check `check_gmail_routing` — every tracker-active project has its label + filter; `@Drafted` max-age alert; flag if a known client/regulator address ever matches a zNews skip-inbox rule. The new surface ships with its own rot detector.
+- **Platform-neutral by construction (handoff shape-01):** the structure lives in Gmail (labels + filters), not in any runtime. If the Code-Desktop platform prototype ends Cowork lock-in, everything carries over; only the small SKILL addenda re-home. The overhaul *reduces* future migration cost by moving routing from prose-in-skills to deterministic filters.
+- **No new actuation surface (handoff Critic on MCP connectors):** the build uses read + label-write only; the XML filter-import path adds zero new grants or scopes. Hard invariants (never send / never move money / never stamp) untouched.
+- **Bounded-HOT / unbounded-COLD (principle 3):** the inbox is the hot path the morning brief pays tokens on every day; triage-then-archive + zNews skip-inbox keep it bounded while the archive grows cold and unbounded. This is the brain's bounding discipline applied to the mailbox.
+- **Roadmap placement (principle 8 + handoff Critic #3):** this is SENSE/QUEUE substrate plus a direct chase of ~$48k already-identified receivables — but it does NOT displace the P0 output-quality items (hands-03/04, brain-04, hands-09) or the website instrumentation (the #1 revenue lever). Build happens in a Claude Code side-session; Tish's cost stays ~2 minutes + one report review.
+
+## 12. Decision log
 
 - Build in Claude Code, operate in Cowork (§1).
 - Filters via XML import, not new OAuth scope (least-credential path; fallback documented).
