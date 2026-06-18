@@ -1,8 +1,8 @@
 /**
  * TAS Hub API client
- * Talks to the backend (Gmail, Firebase, etc.) for everything that needs server-side
- * keys, and falls back to direct Gemini API calls in the browser for AI features
- * when the backend is offline.
+ * Talks to the backend (Netlify Functions + Netlify Blobs for hub state, plus Gmail and
+ * Ollama proxying) for everything that needs server-side keys, and falls back to direct
+ * Gemini API calls in the browser for AI features when the backend is offline.
  */
 
 import { GoogleGenAI } from '@google/genai';
