@@ -19,7 +19,7 @@ Run `C:/Users/Tish/Desktop/TITRIN/Claude/TAS - Tools/system_health.py` and captu
 
 Dispatch an Explore-type subagent with this prompt:
 
-> Audit the TITRIN brain at `C:\Users\Tish\Desktop\TITRIN` for cross-reference integrity. Read-only. Verify every file path in `CLAUDE.md`, `Claude/ARCHITECTURE.md`, `Claude/memory/MEMORY.md` actually exists. Verify scheduled tasks listed in ARCHITECTURE.md Layer 4 match folders in `Claude/Scheduled/`. Verify tools in Layer 5 match `Claude/TAS - Tools/`. Look for stale references — V1 URLs, retired endpoints, archived files still mentioned as active, deadlines that have passed. Report 🟢/🟡/🔴 tiered findings, under 600 words. Don't fix anything.
+> Audit the TITRIN brain at `C:\Users\Tish\Desktop\TITRIN` for cross-reference integrity. Read-only. Verify every file path in `CLAUDE.md`, `Claude/ARCHITECTURE.md`, `Claude/memory/feedback/MEMORY.md` actually exists. Verify scheduled tasks listed in ARCHITECTURE.md Layer 4 match folders in `Claude/Scheduled/`. Verify tools in Layer 5 match `Claude/TAS - Tools/`. Look for stale references — V1 URLs, retired endpoints, archived files still mentioned as active, deadlines that have passed. Report 🟢/🟡/🔴 tiered findings, under 600 words. Don't fix anything.
 
 ## Phase 3 — Drift indicators
 
