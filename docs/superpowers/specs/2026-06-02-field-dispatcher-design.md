@@ -4,6 +4,14 @@
 - **Owner:** Tish Titina, TAS
 - **Status:** 🅿️ **PARKED — do not build yet.** Foundation-only now; build when a trigger below fires.
 - **Why this doc exists:** Capture the full design + "build-it-when" triggers so that when Anthropic ships the missing primitive, a future session starts from a finished blueprint instead of scratch.
+- **2026-07-02 trigger review (delegated by Tish):** the Jul-1 self-audit flagged trigger #2 as plausibly fired
+  (native subagent fan-out / dynamic workflows). Reviewed: those primitives shipped in **Claude Code** (agent
+  teams + the Workflow tool — proven by the 2026-07-02 26-agent system review), **not inside Cowork Dispatch**,
+  and the triggers below require them on the Dispatch channel — so the trigger only PARTIALLY fired.
+  **Ruling: stays parked.** Sharpened triggers: (a) fan-out/decomposition primitives land inside Dispatch/Cowork,
+  OR the scheduled tier completes its Code migration (platform verdict 2026-07-02) making a Code-side dispatcher
+  the coherent home; (b) a live coordinator field workflow demands routed dispatch (field capture is shifting to
+  Tish's coordinators — the revenue case). The no-regret core below is unchanged and remains the priority.
 
 ---
 
