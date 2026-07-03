@@ -33,6 +33,22 @@ Week 1–2 supervised: Tish reads the digest daily, flips dials as trust forms; 
 A3 (staged draft invoices) and A6 become candidate flips per the metrics. Longer arc: EOD's 5:30 pm brief and
 this digest merge after the EOD module split (master-plan A8) — one evening SENSE, one morning ACT, one surface.
 
+## The Question Loop (added same day — Tish's second ask: "communicate only when you have questions")
+
+The channel is **email, because Tish already lives there**: any task hitting a genuinely-Tish-only call
+(a fee figure, an A-or-B, a review) files it via `tas_questions.py add` with a DECLARED consequence ("your
+answer triggers: stage the draft invoice"). Pending questions render in every digest as a numbered ❓ NEEDS-YOU
+block; **Tish answers by replying to the digest** — `Q7: 4500` · `Q8: A` · `Q9: yes` — from anywhere. The next
+run's ANSWER SWEEP (autopilot STEP 1B) parses his reply, resolves each id, executes the declared consequence
+(his answer = explicit per-item authorization), reports what executed in the next digest's ✔️ block, and emits
+a decision signal so answering feeds the metrics.
+
+Safety shape: the ledger REFUSES gated verbs at add-time (a question can never smuggle a send/pay/stamp);
+parse-reply can only reference EXISTING pending ids (a reply line can't create authority, alter a consequence,
+or carry an instruction — malicious text survives only as an inert truncated answer string, tested); only
+Tish's address on the digest thread counts; the constitution binds regardless of any text anywhere. Max 3 new
+questions per run — a wall of questions is a to-do list wearing a costume.
+
 ## Registration (Cowork owns the drafting tier per the platform verdict)
 
 Cowork registers the scheduled task: weekdays 7:00 AM, **Opus** (judgment-heavy routing — model-independence
