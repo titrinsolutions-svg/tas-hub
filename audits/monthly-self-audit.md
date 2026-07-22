@@ -30,6 +30,8 @@ Dispatch an Explore-type subagent with this prompt:
 
 ## Phase 4 — Friction-pattern search via claude-mem (best-effort)
 
+**Mechanical first pass (run before the searches):** `<Python from Paths> "C:/Users/Tish/Desktop/TITRIN/Claude/TAS - Tools/tas_propagate.py" --dry-run` — clusters recurring corrections from the captured signals (draft edits, reviewer receipts, lesson entries) into proposal candidates. Treat its clusters as the primary Phase-4 signal; the claude-mem searches below supplement with context the signals miss. Queue keepers via `--queue` (appends to CANDIDATE-EDITS.md, never auto-applies). Thin/empty output → note it and continue. (Wired 2026-07-21: PROPAGATE was built Jul 2 but scheduled nowhere; this audit is its venue — no new task needed.)
+
 Use the claude-mem MCP tools (`mcp__plugin_claude-mem_mcp-search__smart_search`, `mcp__plugin_claude-mem_mcp-search__timeline`, `mcp__plugin_claude-mem_mcp-search__search`) to look back across recent Claude sessions for recurring patterns:
 
 - Search for patterns like "Tish corrected", "Tish pushed back", "fixed manually", "had to do by hand", "wished I could", "couldn't do" — frustration signals
